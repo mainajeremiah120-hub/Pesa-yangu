@@ -140,19 +140,11 @@ export const invsApi = {
 
 // ── Loans ─────────────────────────────────────────────────────────────────────
 export const loansApi = {
-<<<<<<< HEAD
-  list:            ()             => unwrap(client.get("/loans")),
-  create:          (p)            => unwrap(client.post("/loans", p)),
-  update:          (id, p)        => unwrap(client.patch(`/loans/${id}`, p)),
-  remove:          (id)           => unwrap(client.delete(`/loans/${id}`)),
-  updateRepayment: (loanId, repayId, p) => unwrap(client.patch(`/loans/${loanId}/repayments/${repayId}`, p)),
-=======
   list:              ()           => unwrap(client.get("/loans")),
   create:            (p)          => unwrap(client.post("/loans", p)),
   update:            (id, p)      => unwrap(client.patch(`/loans/${id}`, p)),
   updateRepayment:   (id, rid, p) => unwrap(client.patch(`/loans/${id}/repayments/${rid}`, p)),
   remove:            (id)         => unwrap(client.delete(`/loans/${id}`)),
->>>>>>> 814e2b196ec7bdf5bd5a0b1785c0fe9211499cb1
   recordRepayment: (id, p) => {
     const fd = new FormData();
     Object.entries(p).forEach(([k, v]) => {

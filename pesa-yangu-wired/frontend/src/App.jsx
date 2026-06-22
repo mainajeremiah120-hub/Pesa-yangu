@@ -429,7 +429,8 @@ export default function App() {
   // ── Derived values
   const totalBalance   = wallets.reduce((s,w)=>s+parseFloat(w.balance||0), 0);
   const totalIncome    = txs.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount, 0);
-  const totalExpense   = txs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount, 0);
+  const totalRefunds   = txs.filter(t=>t.type==="refund").reduce((s,t)=>s+t.amount, 0);
+  const totalExpense   = Math.max(0, txs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount, 0) - totalRefunds);
   const portfolioValue = investments.reduce((s,i)=>s+i.units*i.currentPrice, 0);
   const totalDebt      = loans.reduce((s,l)=>s+l.remaining, 0);
   const totalGoalSaved = goals.reduce((s,g)=>s+g.saved, 0);
@@ -439,10 +440,8 @@ export default function App() {
   const spendByCat = useMemo(()=>{
     const m={};
     expCats.forEach(c=>m[c.id]=0);
-    txs.filter(t=>t.type==="expense").forEach(t=>{
-      const key = t.category || t.category_id;
-      m[key] = (m[key]||0)+t.amount;
-    });
+    txs.filter(t=>t.type==="expense").forEach(t=>{ const key=t.category||t.category_id; m[key]=(m[key]||0)+t.amount; });
+    txs.filter(t=>t.type==="refund").forEach(t=>{ const orig=txs.find(x=>x.id===t.refund_of); const key=orig?(orig.category||orig.category_id):null; if(key) m[key]=Math.max(0,(m[key]||0)-t.amount); });
     return m;
   }, [txs, expCats]);
 
@@ -482,6 +481,7 @@ export default function App() {
   const blankRet   = { investmentId:"", type:"interest", amount:"", wallet:"", date:todayStr(), note:"" };
   const blankGoal  = { name:"", icon:"🎯", target:"", wallet:"", deadline:"", color:C.teal };
   const blankRecur = { type:"expense", category:"", amount:"", wallet:"", merchant:"", note:"", freq:"monthly", nextDate:"" };
+  const blankRefund = { refundOf:"", amount:"", wallet:"", note:"", date:todayStr() };
 
   const [fTx,     setFTx]    = useState(blankTx);
   const [fXfer,   setFXfer]  = useState(blankXfer);
@@ -495,16 +495,8 @@ export default function App() {
   const [fRet,    setFRet]   = useState(blankRet);
   const [fGoal,   setFGoal]  = useState(blankGoal);
   const [fRecur,  setFRecur] = useState(blankRecur);
+  const [fRefund, setFRefund]= useState(blankRefund);
 
-<<<<<<< HEAD
-  // Edit tracking — null means we're creating, an id means we're editing
-  const [editingTx,     setEditingTx]     = useState(null);
-  const [editingWal,    setEditingWal]    = useState(null);
-  const [editingGoal,   setEditingGoal]   = useState(null);
-  const [editingInv,    setEditingInv]    = useState(null);
-  const [editingLoan,   setEditingLoan]   = useState(null);
-  const [editingRepay,  setEditingRepay]  = useState(null); // { loanId, repayId }
-=======
   // ── Edit targets (stores the entity being edited, null when adding new)
   const [editTx,      setEditTx]      = useState(null);
   const [editWal,     setEditWal]     = useState(null);
@@ -512,7 +504,7 @@ export default function App() {
   const [editInv,     setEditInv]     = useState(null);
   const [editLoan,    setEditLoan]    = useState(null);
   const [editRepay,   setEditRepay]   = useState(null); // { loan, repayment }
->>>>>>> 814e2b196ec7bdf5bd5a0b1785c0fe9211499cb1
+  const [editRefund,  setEditRefund]  = useState(null);
 
   // Reconcile
   const [recoWallet,  setRecoWallet]  = useState("");
@@ -525,95 +517,6 @@ export default function App() {
   const [importBusy,  setImportBusy]  = useState(false);
 
   // ─────────────────────────────────────────────────────────────────────────
-  // EDIT OPENERS — pre-fill form and open modal in edit mode
-  // ─────────────────────────────────────────────────────────────────────────
-
-  const openEditTx = (t) => {
-    setEditingTx(t.id);
-    setFTx({
-      type:        t.type,
-      category:    t.category || t.category_id || "",
-      amount:      String(t.amount || parseFloat(t.amount_kes || 0)),
-      wallet:      t.wallet || t.wallet_id || "",
-      note:        t.note || "",
-      merchant:    t.merchant || "",
-      date:        t.date || t.tx_date || todayStr(),
-      isRecurring: false,
-      freq:        "monthly",
-    });
-    openM("tx");
-  };
-
-  const openEditWal = (w) => {
-    setEditingWal(w.id);
-    setFWal({
-      name:           w.name,
-      accountType:    w.account_type || w.accountType || "current",
-      currency:       w.currency,
-      icon:           w.icon,
-      color:          w.color,
-      openingBalance: String(parseFloat(w.balance || 0)),
-    });
-    openM("wallet");
-  };
-
-  const openEditGoal = (g) => {
-    setEditingGoal(g.id);
-    setFGoal({
-      name:     g.name,
-      icon:     g.icon,
-      color:    g.color,
-      target:   String(g.target),
-      wallet:   g.wallet || g.wallet_id || "",
-      deadline: g.deadline || "",
-    });
-    openM("goal");
-  };
-
-  const openEditInv = (inv) => {
-    setEditingInv(inv.id);
-    setFInv({
-      name:     inv.name,
-      ticker:   inv.ticker || "",
-      type:     inv.type,
-      units:    String(inv.units),
-      buyPrice: String(inv.buyPrice),
-      currency: inv.currency,
-      wallet:   inv.wallet || inv.wallet_id || "",
-    });
-    openM("inv");
-  };
-
-  const openEditLoan = (l) => {
-    setEditingLoan(l.id);
-    setFLoan({
-      name:           l.name,
-      lender:         l.lender || "",
-      principal:      String(l.principal),
-      rate:           String(l.rate || 0),
-      monthlyPayment: String(l.monthlyPayment),
-      nextDue:        l.nextDue || l.next_due_date || "",
-      currency:       l.currency,
-    });
-    openM("loan");
-  };
-
-  const openEditRepay = (loanId, r, repayId) => {
-    setEditingRepay({ loanId, repayId });
-    setFRepay({
-      loanId,
-      wallet:    r.wallet_id || "",
-      total:     String(r.total || r.total_kes || 0),
-      principal: String(r.principal || r.principal_kes || 0),
-      interest:  String(r.interest  || r.interest_kes  || 0),
-      date:      r.date || r.payment_date || todayStr(),
-      note:      r.note || "",
-      files:     [],
-    });
-    openM("repay");
-  };
-
-  // ─────────────────────────────────────────────────────────────────────────
   // API ACTIONS  (optimistic UI: update state first, then call API)
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -621,33 +524,6 @@ export default function App() {
   const walletCur = (wid) => wallets.find(w=>w.id===wid)?.currency||"KES";
 
   const addTx = async () => {
-    // EDIT MODE
-    if (editingTx) {
-      const amt = parseFloat(fTx.amount); if(!amt) return;
-      const wid = fTx.wallet;
-      const amtKES = toKES(amt, walletCur(wid), currencies);
-      try {
-        const { transaction: tx } = await txApi.update(editingTx, {
-          wallet_id:   wid,
-          category_id: fTx.category || undefined,
-          type:        fTx.type,
-          amount_kes:  amtKES,
-          merchant:    fTx.merchant || undefined,
-          note:        fTx.note || undefined,
-          tx_date:     fTx.date || todayStr(),
-        });
-        setTxs(p => p.map(t => t.id === editingTx
-          ? { ...tx, wallet:tx.wallet_id, category:tx.category_id, amount:parseFloat(tx.amount_kes), date:tx.tx_date }
-          : t
-        ));
-        // Reload wallets to get accurate balances
-        const { wallets: freshW } = await walletsApi.list();
-        setWallets(freshW || []);
-        setEditingTx(null); setFTx(blankTx); closeM("tx");
-        showToast("Transaction updated");
-      } catch(err) { showToast(err?.response?.data?.error || "Failed to update", C.coral); }
-      return;
-    }
     const amt = parseFloat(fTx.amount); if(!amt) return;
     const wid = fTx.wallet;
     const amtKES = toKES(amt, walletCur(wid), currencies);
@@ -696,23 +572,6 @@ export default function App() {
 
   const addWallet = async () => {
     if(!fWal.name) return;
-    // EDIT MODE
-    if (editingWal) {
-      try {
-        const { wallet } = await walletsApi.update(editingWal, {
-          name:         fWal.name,
-          account_type: fWal.accountType,
-          currency:     fWal.currency,
-          color:        fWal.color,
-          icon:         fWal.icon,
-          balance:      toKES(parseFloat(fWal.openingBalance)||0, fWal.currency, currencies),
-        });
-        setWallets(p => p.map(w => w.id === editingWal ? wallet : w));
-        setEditingWal(null); setFWal(blankWal); closeM("wallet");
-        showToast("Account updated");
-      } catch(err) { showToast(err?.response?.data?.error || "Failed", C.coral); }
-      return;
-    }
     if(wallets.length>=limits.wallets) { openM("billing"); return; }
     try {
       const bal = toKES(parseFloat(fWal.openingBalance)||0, fWal.currency, currencies);
@@ -768,26 +627,8 @@ export default function App() {
   };
 
   const addLoan = async () => {
-    const p = parseFloat(fLoan.principal); if(!p||!fLoan.name) return;
-    // EDIT MODE
-    if (editingLoan) {
-      try {
-        const { loan } = await loansApi.update(editingLoan, {
-          name:                fLoan.name,
-          lender:              fLoan.lender || undefined,
-          currency:            fLoan.currency,
-          principal_kes:       toKES(p, fLoan.currency, currencies),
-          interest_rate:       parseFloat(fLoan.rate) || 0,
-          monthly_payment_kes: toKES(parseFloat(fLoan.monthlyPayment)||0, fLoan.currency, currencies),
-          next_due_date:       fLoan.nextDue || undefined,
-        });
-        setLoans(prev => prev.map(l => l.id === editingLoan ? normaliseLoan({...loan, repayments: l.repayments}) : l));
-        setEditingLoan(null); setFLoan(blankLoan); closeM("loan");
-        showToast("Loan updated");
-      } catch(err) { showToast(err?.response?.data?.error || "Failed", C.coral); }
-      return;
-    }
     if(loans.length>=limits.loans) { openM("billing"); return; }
+    const p = parseFloat(fLoan.principal); if(!p||!fLoan.name) return;
     try {
       const { loan } = await loansApi.create({
         name:fLoan.name, lender:fLoan.lender||undefined, currency:fLoan.currency,
@@ -805,28 +646,6 @@ export default function App() {
   const addRepayment = async () => {
     const total = parseFloat(fRepay.total); if(!total) return;
     const loan  = loans.find(l=>l.id===fRepay.loanId); if(!loan) return;
-    // EDIT MODE
-    if (editingRepay) {
-      try {
-        const { repayment } = await loansApi.updateRepayment(editingRepay.loanId, editingRepay.repayId, {
-          total_kes:     toKES(total, loan.currency, currencies),
-          principal_kes: toKES(parseFloat(fRepay.principal)||0, loan.currency, currencies),
-          interest_kes:  toKES(parseFloat(fRepay.interest)||0,  loan.currency, currencies),
-          payment_date:  fRepay.date,
-          note:          fRepay.note || undefined,
-        });
-        setLoans(prev => prev.map(l => l.id === loan.id ? {
-          ...l,
-          repayments: l.repayments.map(r => (r.id||r.repayId) === editingRepay.repayId
-            ? { ...r, total:parseFloat(repayment.total_kes), principal:parseFloat(repayment.principal_kes), interest:parseFloat(repayment.interest_kes), date:repayment.payment_date, note:repayment.note }
-            : r
-          )
-        } : l));
-        setEditingRepay(null); setFRepay(blankRepay); closeM("repay");
-        showToast("Repayment updated");
-      } catch(err) { showToast(err?.response?.data?.error || "Failed", C.coral); }
-      return;
-    }
     try {
       const { repayment } = await loansApi.recordRepayment(loan.id, {
         wallet_id:    fRepay.wallet,
@@ -847,28 +666,9 @@ export default function App() {
   };
 
   const addInvestment = async () => {
+    if(investments.length>=limits.investments) { openM("billing"); return; }
     const units=parseFloat(fInv.units), price=parseFloat(fInv.buyPrice);
     if(!units||!price||!fInv.name) return;
-    // EDIT MODE
-    if (editingInv) {
-      try {
-        const { investment: inv } = await invsApi.update(editingInv, {
-          name:              fInv.name,
-          ticker:            fInv.ticker || undefined,
-          type:              fInv.type,
-          currency:          fInv.currency,
-          units,
-          buy_price_kes:     toKES(price, fInv.currency, currencies),
-          current_price_kes: toKES(price, fInv.currency, currencies),
-          wallet_id:         fInv.wallet || undefined,
-        });
-        setInvestments(prev => prev.map(i => i.id === editingInv ? normaliseInv({...inv, returns: i.returns}) : i));
-        setEditingInv(null); setFInv(blankInv); closeM("inv");
-        showToast("Investment updated");
-      } catch(err) { showToast(err?.response?.data?.error || "Failed", C.coral); }
-      return;
-    }
-    if(investments.length>=limits.investments) { openM("billing"); return; }
     try {
       const { investment: inv } = await invsApi.create({
         wallet_id:         fInv.wallet,
@@ -904,25 +704,8 @@ export default function App() {
   };
 
   const addGoal = async () => {
-    const t=parseFloat(fGoal.target); if(!t||!fGoal.name) return;
-    // EDIT MODE
-    if (editingGoal) {
-      try {
-        const { goal } = await goalsApi.update(editingGoal, {
-          name:       fGoal.name,
-          icon:       fGoal.icon,
-          color:      fGoal.color,
-          target_kes: t,
-          deadline:   fGoal.deadline || undefined,
-          wallet_id:  fGoal.wallet || undefined,
-        });
-        setGoals(prev => prev.map(g => g.id === editingGoal ? normaliseGoal(goal) : g));
-        setEditingGoal(null); setFGoal(blankGoal); closeM("goal");
-        showToast("Goal updated");
-      } catch(err) { showToast(err?.response?.data?.error || "Failed", C.coral); }
-      return;
-    }
     if(goals.length>=limits.goals) { openM("billing"); return; }
+    const t=parseFloat(fGoal.target); if(!t||!fGoal.name) return;
     try {
       const { goal } = await goalsApi.create({
         wallet_id:  fGoal.wallet,
@@ -1204,6 +987,44 @@ export default function App() {
       } catch(err) { showToast(err?.response?.data?.error || "Failed", C.coral); }
     } else {
       addRepayment();
+    }
+  };
+
+  // ── Refund handlers ──────────────────────────────────────────────────────────
+  const openRefundModal = (tx) => {
+    setEditRefund(null);
+    setFRefund({ refundOf:tx.id, amount:String(tx.amount||parseFloat(tx.amount_kes||0)), wallet:tx.wallet||tx.wallet_id||wallets[0]?.id||"", note:`Refund: ${tx.merchant||tx.note||""}`.trim(), date:todayStr() });
+    openM("refund");
+  };
+
+  const openEditRefundModal = (tx) => {
+    setEditRefund(tx);
+    setFRefund({ refundOf:tx.refund_of||"", amount:String(tx.amount||parseFloat(tx.amount_kes||0)), wallet:tx.wallet||tx.wallet_id||"", note:tx.note||"", date:tx.date||tx.tx_date||todayStr() });
+    openM("refund");
+  };
+
+  const saveRefund = async () => {
+    const amt = parseFloat(fRefund.amount); if(!amt||!fRefund.refundOf||!fRefund.wallet) return;
+    const amtKES = toKES(amt, walletCur(fRefund.wallet), currencies);
+    if (editRefund) {
+      try {
+        const { transaction: tx } = await txApi.update(editRefund.id, { wallet_id:fRefund.wallet, amount_kes:amtKES, note:fRefund.note||undefined, tx_date:fRefund.date, refund_of:fRefund.refundOf });
+        const norm = { ...tx, wallet:tx.wallet_id, category:tx.category_id, amount:parseFloat(tx.amount_kes), date:tx.tx_date };
+        setTxs(p=>p.map(t=>t.id===editRefund.id?norm:t));
+        const oldAmt=editRefund.amount||parseFloat(editRefund.amount_kes||0), oldWid=editRefund.wallet||editRefund.wallet_id;
+        setWallets(p=>p.map(w=>{ let b=parseFloat(w.balance); if(w.id===oldWid) b-=oldAmt; if(w.id===fRefund.wallet) b+=amtKES; return (w.id===oldWid||w.id===fRefund.wallet)?{...w,balance:b}:w; }));
+        setEditRefund(null); setFRefund(blankRefund); closeM("refund");
+        showToast("Refund updated");
+      } catch(err) { showToast(err?.response?.data?.error||"Failed to update refund", C.coral); }
+    } else {
+      try {
+        const { transaction: tx } = await txApi.create({ wallet_id:fRefund.wallet, type:"refund", amount_kes:amtKES, note:fRefund.note||undefined, tx_date:fRefund.date, refund_of:fRefund.refundOf });
+        const norm = { ...tx, wallet:tx.wallet_id, category:tx.category_id, amount:parseFloat(tx.amount_kes), date:tx.tx_date };
+        setTxs(p=>[norm,...p]);
+        setWallets(p=>p.map(w=>w.id===fRefund.wallet?{...w,balance:parseFloat(w.balance)+amtKES}:w));
+        setFRefund(blankRefund); closeM("refund");
+        showToast("Refund recorded");
+      } catch(err) { showToast(err?.response?.data?.error||"Failed to record refund", C.coral); }
     }
   };
 
@@ -1595,17 +1416,21 @@ export default function App() {
               </div>
               {txs.slice(0,8).map((t,i)=>{
                 const isT=t.type==="transfer_out"||t.type==="transfer_in";
+                const isRefund=t.type==="refund";
                 const catId=t.category||t.category_id;
-                const cat=isT?{icon:"⇄",name:"Transfer",color:C.blue}:t.type==="expense"?expCats.find(c=>c.id===catId):incCats.find(c=>c.id===catId);
+                const cat=isT?{icon:"⇄",name:"Transfer",color:C.blue}:isRefund?{icon:"↩️",name:"Refund",color:"#9B59B6"}:t.type==="expense"?expCats.find(c=>c.id===catId):incCats.find(c=>c.id===catId);
                 const w=wallets.find(w=>w.id===(t.wallet||t.wallet_id));
-                const isIn=t.type==="income"||t.type==="transfer_in";
+                const isIn=t.type==="income"||t.type==="transfer_in"||isRefund;
                 return<div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:i<7?`1px solid ${C.navyLight}`:"none"}}>
                   <div style={{width:34,height:34,borderRadius:9,background:(cat?.color||C.blue)+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>{cat?.icon||"💸"}</div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.merchant||t.note||"Transaction"}</div>
                     <div style={{fontSize:10,color:C.textMuted}}>{cat?.name||"—"} · {w?.name||"—"} · {t.date||t.tx_date}</div>
                   </div>
-                  <div style={{fontSize:12,fontWeight:700,color:isIn?C.teal:C.textPrimary,flexShrink:0}}>{isIn?"+":"−"}{disp(t.amount||parseFloat(t.amount_kes||0))}</div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <div style={{fontSize:12,fontWeight:700,color:isIn?C.teal:C.textPrimary}}>{isIn?"+":"−"}{disp(t.amount||parseFloat(t.amount_kes||0))}</div>
+                    {isRefund&&<Badge color="#9B59B6">↩ refund</Badge>}
+                  </div>
                 </div>;
               })}
               {txs.length===0&&<div style={{textAlign:"center",color:C.textFaint,padding:"20px 0",fontSize:13}}>No transactions yet. Click + Add to get started.</div>}
@@ -1691,26 +1516,31 @@ export default function App() {
             <Card style={{padding:0}}>
               {(limits.txHistory<Infinity?txs.slice(0,limits.txHistory):txs).map((t,i,arr)=>{
                 const isT=t.type==="transfer_out"||t.type==="transfer_in";
+                const isRefund=t.type==="refund";
                 const catId=t.category||t.category_id;
-                const cat=isT?{icon:"⇄",name:"Transfer",color:C.blue}:t.type==="expense"?expCats.find(c=>c.id===catId):incCats.find(c=>c.id===catId);
+                const cat=isT?{icon:"⇄",name:"Transfer",color:C.blue}:isRefund?{icon:"↩️",name:"Refund",color:"#9B59B6"}:t.type==="expense"?expCats.find(c=>c.id===catId):incCats.find(c=>c.id===catId);
                 const w=wallets.find(w=>w.id===(t.wallet||t.wallet_id));
-                const isIn=t.type==="income"||t.type==="transfer_in";
+                const isIn=t.type==="income"||t.type==="transfer_in"||isRefund;
                 const amt=t.amount||parseFloat(t.amount_kes||0);
-                return<div key={t.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 18px",borderBottom:i<arr.length-1?`1px solid ${C.navyLight}`:"none"}}>
+                const origTx=isRefund?txs.find(x=>x.id===t.refund_of):null;
+                return<div key={t.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 18px",borderBottom:i<arr.length-1?`1px solid ${C.navyLight}`:"none",background:isRefund?"#9B59B611":"transparent"}}>
                   <div style={{width:36,height:36,borderRadius:10,background:(cat?.color||C.teal)+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>{cat?.icon||"💸"}</div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontWeight:600,fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.merchant||t.note||"Transaction"}</div>
-                    <div style={{color:C.textMuted,fontSize:10,marginTop:2,display:"flex",gap:6,flexWrap:"wrap"}}>
+                    <div style={{color:C.textMuted,fontSize:10,marginTop:2,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
                       <span>{cat?.name||"—"}</span><span>·</span><span>{w?.name||"—"}</span><span>·</span><span>{t.date||t.tx_date}</span>
                       {t.loanId&&<Badge color={C.coral}>Loan</Badge>}
                       {t.recurring&&<Badge color={C.purple}>🔁</Badge>}
+                      {isRefund&&origTx&&<span style={{color:"#9B59B6"}}>↩ {origTx.merchant||origTx.note||"expense"}</span>}
                     </div>
                   </div>
                   <div style={{textAlign:"right",flexShrink:0}}>
                     <div style={{fontWeight:700,fontSize:13,color:isIn?C.teal:C.textPrimary}}>{isIn?"+":"−"}{disp(amt)}</div>
                     <div style={{display:"flex",gap:5,justifyContent:"flex-end",marginTop:4,alignItems:"center"}}>
-                      <Badge color={isT?C.blue:isIn?C.teal:C.coral}>{isT?t.type.replace("_"," "):t.type}</Badge>
-                      {!isT&&<button onClick={()=>openEditTx(t)} style={{background:"none",border:"none",color:C.textMuted,cursor:"pointer",fontSize:11,padding:"2px 4px"}} title="Edit">✏️</button>}
+                      {isRefund?<Badge color="#9B59B6">↩ refund</Badge>:<Badge color={isT?C.blue:isIn?C.teal:C.coral}>{isT?t.type.replace("_"," "):t.type}</Badge>}
+                      {isRefund&&<button onClick={()=>openEditRefundModal(t)} style={{background:"none",border:"none",color:C.textMuted,cursor:"pointer",fontSize:11,padding:"2px 4px"}} title="Edit refund">✏️</button>}
+                      {!isT&&!isRefund&&<button onClick={()=>openEditTx(t)} style={{background:"none",border:"none",color:C.textMuted,cursor:"pointer",fontSize:11,padding:"2px 4px"}} title="Edit">✏️</button>}
+                      {t.type==="expense"&&<button onClick={()=>openRefundModal(t)} style={{background:"none",border:"none",color:"#9B59B6",cursor:"pointer",fontSize:11,padding:"2px 4px"}} title="Record refund">↩</button>}
                     </div>
                   </div>
                 </div>;
@@ -2205,6 +2035,33 @@ export default function App() {
         <Field label="Wallet" value={fRecur.wallet} onChange={v=>setFRecur({...fRecur,wallet:v})} options={wOpts}/>
         <Field label="Next Date" type="date" value={fRecur.nextDate} onChange={v=>setFRecur({...fRecur,nextDate:v})}/>
         <Btn onClick={addRecurring} style={{width:"100%",padding:13,fontSize:14}}>Add Recurring</Btn>
+      </Modal>
+
+      {/* Record / Edit Refund */}
+      <Modal open={isOpen("refund")} onClose={()=>{closeM("refund");setEditRefund(null);setFRefund(blankRefund);}} title={editRefund?"✏️ Edit Refund":"↩️ Record Refund"}>
+        <Field label="Linked Expense" value={fRefund.refundOf} onChange={v=>setFRefund({...fRefund,refundOf:v})}
+          options={[{value:"",label:"— Select original expense —"},...txs.filter(t=>t.type==="expense").slice(0,100).map(t=>({value:t.id,label:`${t.date||t.tx_date} · ${t.merchant||t.note||"Expense"} · ${disp(t.amount||parseFloat(t.amount_kes||0))}`}))]}/>
+        {fRefund.refundOf&&(()=>{
+          const orig=txs.find(t=>t.id===fRefund.refundOf);
+          if(!orig) return null;
+          const cat=expCats.find(c=>c.id===(orig.category||orig.category_id));
+          return<div style={{background:C.navyLight,borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:C.textMuted}}>
+            <span style={{fontSize:16,marginRight:6}}>{cat?.icon||"💸"}</span>
+            <strong style={{color:C.textPrimary}}>{orig.merchant||orig.note||"Expense"}</strong>{" · "}{cat?.name||"—"}{" · "}<strong style={{color:C.coral}}>{disp(orig.amount||parseFloat(orig.amount_kes||0))}</strong>{" on "}{orig.date||orig.tx_date}
+          </div>;
+        })()}
+        <div className="grid-2">
+          <Field label="Refund Amount" type="number" value={fRefund.amount} onChange={v=>setFRefund({...fRefund,amount:v})} placeholder="0.00" note="In wallet's currency"/>
+          <Field label="Date" type="date" value={fRefund.date} onChange={v=>setFRefund({...fRefund,date:v})}/>
+        </div>
+        <Field label="Credit to Wallet" value={fRefund.wallet} onChange={v=>setFRefund({...fRefund,wallet:v})} options={wOpts}/>
+        <Field label="Note (optional)" value={fRefund.note} onChange={v=>setFRefund({...fRefund,note:v})} placeholder="e.g. Returned damaged item"/>
+        <div style={{background:C.navyLight,borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:11,color:C.textMuted,lineHeight:1.7}}>
+          ↩ Refund will be <strong style={{color:C.teal}}>credited to your wallet</strong> and <strong style={{color:C.teal}}>deducted from category spend</strong>.
+        </div>
+        <Btn onClick={saveRefund} disabled={!fRefund.refundOf||!fRefund.amount||!fRefund.wallet} style={{width:"100%",padding:13,fontSize:14}}>
+          {editRefund?"Save Changes":"Record Refund"}
+        </Btn>
       </Modal>
 
       {/* Import / Export */}

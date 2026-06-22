@@ -226,7 +226,7 @@ const FileUpload = ({ label, accept, onFile, files=[] }) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // GOAL CARD  — own component so useState doesn't break inside .map()
 // ─────────────────────────────────────────────────────────────────────────────
-function GoalCard({ g, wallets, disp, onFund, C, Bar }) {
+function GoalCard({ g, wallets, disp, onFund, onEdit, C, Bar }) {
   const [amt, setAmt] = useState("");
   const [busy, setBusy] = useState(false);
   const pct    = Math.min((g.saved_kes/g.target_kes)*100, 100);
@@ -254,6 +254,7 @@ function GoalCard({ g, wallets, disp, onFund, C, Bar }) {
         <div style={{ textAlign:"right" }}>
           <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:22, color:g.color }}>{pct.toFixed(0)}%</div>
           <div style={{ color:C.textMuted, fontSize:10 }}>of {disp(g.target_kes)}</div>
+          {onEdit&&<button onClick={()=>onEdit(g)} style={{background:"none",border:`1px solid ${C.navyLight}`,borderRadius:6,color:C.textMuted,padding:"3px 8px",cursor:"pointer",fontSize:10,marginTop:4}}>✏️ Edit</button>}
         </div>
       </div>
       <Bar value={g.saved_kes} max={g.target_kes} color={g.color}/>
@@ -495,6 +496,7 @@ export default function App() {
   const [fGoal,   setFGoal]  = useState(blankGoal);
   const [fRecur,  setFRecur] = useState(blankRecur);
 
+<<<<<<< HEAD
   // Edit tracking — null means we're creating, an id means we're editing
   const [editingTx,     setEditingTx]     = useState(null);
   const [editingWal,    setEditingWal]    = useState(null);
@@ -502,6 +504,15 @@ export default function App() {
   const [editingInv,    setEditingInv]    = useState(null);
   const [editingLoan,   setEditingLoan]   = useState(null);
   const [editingRepay,  setEditingRepay]  = useState(null); // { loanId, repayId }
+=======
+  // ── Edit targets (stores the entity being edited, null when adding new)
+  const [editTx,      setEditTx]      = useState(null);
+  const [editWal,     setEditWal]     = useState(null);
+  const [editGoal,    setEditGoal]    = useState(null);
+  const [editInv,     setEditInv]     = useState(null);
+  const [editLoan,    setEditLoan]    = useState(null);
+  const [editRepay,   setEditRepay]   = useState(null); // { loan, repayment }
+>>>>>>> 814e2b196ec7bdf5bd5a0b1785c0fe9211499cb1
 
   // Reconcile
   const [recoWallet,  setRecoWallet]  = useState("");
@@ -948,6 +959,254 @@ export default function App() {
     } catch(err) { showToast(err?.response?.data?.error||"Failed", C.coral); }
   };
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // EDIT HANDLERS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Open edit modal pre-filled
+  const openEditTx = (tx) => {
+    setEditTx(tx);
+    setFTx({
+      type:     tx.type,
+      category: tx.category || tx.category_id || "",
+      amount:   String(tx.amount || parseFloat(tx.amount_kes || 0)),
+      wallet:   tx.wallet || tx.wallet_id || "",
+      note:     tx.note || "",
+      merchant: tx.merchant || "",
+      isRecurring: false,
+      freq: "monthly",
+      date: tx.date || tx.tx_date || todayStr(),
+    });
+    openM("tx");
+  };
+
+  const openEditWallet = (w) => {
+    setEditWal(w);
+    setFWal({
+      name:           w.name,
+      accountType:    w.account_type || w.accountType || "current",
+      currency:       w.currency || "KES",
+      icon:           w.icon || "🏦",
+      color:          w.color || C.teal,
+      openingBalance: String(parseFloat(w.balance || 0)),
+    });
+    openM("wallet");
+  };
+
+  const openEditGoal = (g) => {
+    setEditGoal(g);
+    setFGoal({
+      name:     g.name,
+      icon:     g.icon || "🎯",
+      target:   String(g.target_kes || g.target || ""),
+      wallet:   g.wallet_id || g.wallet || "",
+      deadline: g.deadline || "",
+      color:    g.color || C.teal,
+    });
+    openM("goal");
+  };
+
+  const openEditInv = (inv) => {
+    setEditInv(inv);
+    setFInv({
+      name:      inv.name,
+      ticker:    inv.ticker || "",
+      type:      inv.type || "Stock",
+      units:     String(inv.units || ""),
+      buyPrice:  String(inv.buyPrice || inv.buy_price_kes || ""),
+      currency:  inv.currency || "KES",
+      wallet:    inv.wallet || inv.wallet_id || "",
+      currentPrice: String(inv.currentPrice || inv.current_price_kes || ""),
+    });
+    openM("inv");
+  };
+
+  const openEditLoan = (l) => {
+    setEditLoan(l);
+    setFLoan({
+      name:           l.name,
+      lender:         l.lender || "",
+      principal:      String(l.principal || l.principal_kes || ""),
+      rate:           String(l.rate || l.interest_rate || ""),
+      monthlyPayment: String(l.monthlyPayment || l.monthly_payment_kes || ""),
+      nextDue:        l.nextDue || l.next_due_date || "",
+      currency:       l.currency || "KES",
+    });
+    openM("loan");
+  };
+
+  const openEditRepay = (loan, repayment) => {
+    setEditRepay({ loan, repayment });
+    setFRepay({
+      loanId:    loan.id,
+      wallet:    repayment.wallet || repayment.wallet_id || wallets[0]?.id || "",
+      total:     String(repayment.total || repayment.total_kes || ""),
+      principal: String(repayment.principal || repayment.principal_kes || ""),
+      interest:  String(repayment.interest || repayment.interest_kes || ""),
+      date:      repayment.date || repayment.payment_date || todayStr(),
+      note:      repayment.note || "",
+      files:     [],
+    });
+    openM("repay");
+  };
+
+  // Save edits
+  const saveTx = async () => {
+    const amt = parseFloat(fTx.amount); if (!amt) return;
+    const wid = fTx.wallet;
+    const amtKES = toKES(amt, walletCur(wid), currencies);
+    if (editTx) {
+      // EDIT mode
+      try {
+        const { transaction: tx } = await txApi.update(editTx.id, {
+          wallet_id:   wid,
+          category_id: fTx.category || undefined,
+          type:        fTx.type,
+          amount_kes:  amtKES,
+          merchant:    fTx.merchant || undefined,
+          note:        fTx.note || undefined,
+          tx_date:     fTx.date || todayStr(),
+        });
+        const norm = { ...tx, wallet:tx.wallet_id, category:tx.category_id, amount:parseFloat(tx.amount_kes), date:tx.tx_date };
+        setTxs(p => p.map(t => t.id === editTx.id ? norm : t));
+        // Recalculate wallet balances: reverse old, apply new
+        const oldAmt   = editTx.amount || parseFloat(editTx.amount_kes || 0);
+        const oldIsIn  = editTx.type === "income" || editTx.type === "transfer_in";
+        const newIsIn  = fTx.type === "income" || fTx.type === "transfer_in";
+        const oldWid   = editTx.wallet || editTx.wallet_id;
+        setWallets(p => p.map(w => {
+          let bal = parseFloat(w.balance);
+          if (w.id === oldWid) bal += oldIsIn ? -oldAmt : oldAmt;
+          if (w.id === wid)    bal += newIsIn ?  amtKES : -amtKES;
+          return w.id === oldWid || w.id === wid ? { ...w, balance: bal } : w;
+        }));
+        setEditTx(null); setFTx(blankTx); closeM("tx");
+        showToast("Transaction updated");
+      } catch(err) { showToast(err?.response?.data?.error || "Failed to update", C.coral); }
+    } else {
+      addTx();
+    }
+  };
+
+  const saveWallet = async () => {
+    if (!fWal.name) return;
+    if (editWal) {
+      try {
+        const bal = toKES(parseFloat(fWal.openingBalance) || 0, fWal.currency, currencies);
+        const { wallet } = await walletsApi.update(editWal.id, {
+          name:         fWal.name,
+          account_type: fWal.accountType,
+          currency:     fWal.currency,
+          balance:      bal,
+          color:        fWal.color,
+          icon:         fWal.icon,
+        });
+        setWallets(p => p.map(w => w.id === editWal.id ? wallet : w));
+        setEditWal(null); setFWal(blankWal); closeM("wallet");
+        showToast("Account updated");
+      } catch(err) { showToast(err?.response?.data?.error || "Failed", C.coral); }
+    } else {
+      addWallet();
+    }
+  };
+
+  const saveGoal = async () => {
+    const t = parseFloat(fGoal.target); if (!t || !fGoal.name) return;
+    if (editGoal) {
+      try {
+        const { goal } = await goalsApi.update(editGoal.id, {
+          name:       fGoal.name,
+          icon:       fGoal.icon,
+          color:      fGoal.color,
+          target_kes: t,
+          wallet_id:  fGoal.wallet || undefined,
+          deadline:   fGoal.deadline || null,
+        });
+        setGoals(p => p.map(g => g.id === editGoal.id ? normaliseGoal(goal) : g));
+        setEditGoal(null); setFGoal(blankGoal); closeM("goal");
+        showToast("Goal updated");
+      } catch(err) { showToast(err?.response?.data?.error || "Failed", C.coral); }
+    } else {
+      addGoal();
+    }
+  };
+
+  const saveInvestment = async () => {
+    const units = parseFloat(fInv.units), price = parseFloat(fInv.buyPrice);
+    if (!fInv.name) return;
+    if (editInv) {
+      try {
+        const payload = {};
+        if (fInv.name)         payload.name              = fInv.name;
+        if (fInv.ticker)       payload.ticker             = fInv.ticker;
+        if (fInv.type)         payload.type               = fInv.type;
+        if (fInv.currency)     payload.currency           = fInv.currency;
+        if (units)             payload.units              = units;
+        if (price)             payload.buy_price_kes      = toKES(price, fInv.currency, currencies);
+        if (fInv.currentPrice) payload.current_price_kes  = toKES(parseFloat(fInv.currentPrice), fInv.currency, currencies);
+        if (fInv.wallet)       payload.wallet_id          = fInv.wallet;
+        const { investment: inv } = await invsApi.update(editInv.id, payload);
+        setInvestments(p => p.map(i => i.id === editInv.id ? normaliseInv({ ...inv, returns: editInv.returns || [] }) : i));
+        setEditInv(null); setFInv(blankInv); closeM("inv");
+        showToast("Investment updated");
+      } catch(err) { showToast(err?.response?.data?.error || "Failed", C.coral); }
+    } else {
+      addInvestment();
+    }
+  };
+
+  const saveLoan = async () => {
+    if (!fLoan.name) return;
+    if (editLoan) {
+      try {
+        const payload = { name: fLoan.name };
+        if (fLoan.lender)         payload.lender              = fLoan.lender;
+        if (fLoan.currency)       payload.currency            = fLoan.currency;
+        if (fLoan.principal)      payload.principal_kes       = toKES(parseFloat(fLoan.principal), fLoan.currency, currencies);
+        if (fLoan.rate)           payload.interest_rate       = parseFloat(fLoan.rate);
+        if (fLoan.monthlyPayment) payload.monthly_payment_kes = toKES(parseFloat(fLoan.monthlyPayment), fLoan.currency, currencies);
+        if (fLoan.nextDue)        payload.next_due_date       = fLoan.nextDue;
+        const { loan } = await loansApi.update(editLoan.id, payload);
+        setLoans(p => p.map(l => l.id === editLoan.id ? { ...normaliseLoan(loan), repayments: editLoan.repayments } : l));
+        setEditLoan(null); setFLoan(blankLoan); closeM("loan");
+        showToast("Loan updated");
+      } catch(err) { showToast(err?.response?.data?.error || "Failed", C.coral); }
+    } else {
+      addLoan();
+    }
+  };
+
+  const saveRepayment = async () => {
+    const total = parseFloat(fRepay.total); if (!total) return;
+    if (editRepay) {
+      try {
+        const { repayment } = await loansApi.updateRepayment(editRepay.loan.id, editRepay.repayment.id, {
+          wallet_id:    fRepay.wallet,
+          total_kes:    toKES(total, editRepay.loan.currency, currencies),
+          principal_kes:toKES(parseFloat(fRepay.principal) || 0, editRepay.loan.currency, currencies),
+          interest_kes: toKES(parseFloat(fRepay.interest) || 0,  editRepay.loan.currency, currencies),
+          payment_date: fRepay.date,
+          note:         fRepay.note || undefined,
+        });
+        setLoans(p => p.map(l => {
+          if (l.id !== editRepay.loan.id) return l;
+          const reps = l.repayments.map(r =>
+            r.id === editRepay.repayment.id
+              ? { ...r, total:parseFloat(repayment.total_kes), principal:parseFloat(repayment.principal_kes), interest:parseFloat(repayment.interest_kes), date:repayment.payment_date, note:repayment.note }
+              : r
+          );
+          // Recalc remaining
+          const paidPrincipal = reps.reduce((s, r) => s + (r.principal || 0), 0);
+          return { ...l, repayments: reps, remaining: Math.max(0, l.principal - paidPrincipal) };
+        }));
+        setEditRepay(null); setFRepay(blankRepay); closeM("repay");
+        showToast("Repayment updated");
+      } catch(err) { showToast(err?.response?.data?.error || "Failed", C.coral); }
+    } else {
+      addRepayment();
+    }
+  };
+
   const toggleRecurring = async (id) => {
     try {
       const { recurring: r } = await recurApi.toggle(id);
@@ -1217,7 +1476,7 @@ export default function App() {
           <Btn onClick={()=>openM("share")} outline color={C.purple} small className="desktop-only-btn">📤 Share</Btn>
           <Btn onClick={()=>openM("importExport")} outline color={C.textMuted} small className="desktop-only-btn">⬆⬇ Data</Btn>
           <Btn onClick={getAI} outline color={C.gold} small className="desktop-only-btn">✦ AI</Btn>
-          <Btn onClick={()=>{setFTx({...blankTx,wallet:wallets[0]?.id||"",category:expCats[0]?.id||""});openM("tx");}} small>+ Add</Btn>
+          <Btn onClick={()=>{setEditTx(null);setFTx({...blankTx,wallet:wallets[0]?.id||"",category:expCats[0]?.id||""});openM("tx");}} small>+ Add</Btn>
           <button onClick={logout} className="desktop-only-btn" style={{background:"none",border:`1px solid ${C.navyLight}`,borderRadius:8,color:C.textMuted,padding:"6px 10px",cursor:"pointer",fontSize:11}}>Sign out</button>
         </div>
       </div>
@@ -1385,6 +1644,7 @@ export default function App() {
                     <div style={{textAlign:"right"}}>
                       <div style={{fontFamily:"'DM Serif Display',serif",fontSize:20,color:w.color}}>{fmtC(bal,w.currency,currencies)}</div>
                       {baseCurrency!==w.currency&&<div style={{color:C.textFaint,fontSize:10,marginTop:1}}>≈ {disp(bal)}</div>}
+                      <button onClick={()=>openEditWallet(w)} style={{background:"none",border:`1px solid ${C.navyLight}`,borderRadius:6,color:C.textMuted,padding:"3px 8px",cursor:"pointer",fontSize:10,marginTop:6}}>✏️ Edit</button>
                     </div>
                   </div>
                   <div style={{display:"flex",gap:14,fontSize:11,color:C.textMuted,marginBottom:8}}>
@@ -1420,7 +1680,7 @@ export default function App() {
               </div>
               <div style={{display:"flex",gap:8}}>
                 <Btn onClick={exportTransactions} outline color={C.textMuted} small>⬇ Export</Btn>
-                <Btn onClick={()=>{setFTx({...blankTx,wallet:wallets[0]?.id||"",category:expCats[0]?.id||""});openM("tx");}}>+ Add Transaction</Btn>
+                <Btn onClick={()=>{setEditTx(null);setFTx({...blankTx,wallet:wallets[0]?.id||"",category:expCats[0]?.id||""});openM("tx");}}>+ Add Transaction</Btn>
               </div>
             </div>
             <div className="grid-3">
@@ -1448,7 +1708,10 @@ export default function App() {
                   </div>
                   <div style={{textAlign:"right",flexShrink:0}}>
                     <div style={{fontWeight:700,fontSize:13,color:isIn?C.teal:C.textPrimary}}>{isIn?"+":"−"}{disp(amt)}</div>
-                    <Badge color={isT?C.blue:isIn?C.teal:C.coral}>{isT?t.type.replace("_"," "):t.type}</Badge>
+                    <div style={{display:"flex",gap:5,justifyContent:"flex-end",marginTop:4,alignItems:"center"}}>
+                      <Badge color={isT?C.blue:isIn?C.teal:C.coral}>{isT?t.type.replace("_"," "):t.type}</Badge>
+                      {!isT&&<button onClick={()=>openEditTx(t)} style={{background:"none",border:"none",color:C.textMuted,cursor:"pointer",fontSize:11,padding:"2px 4px"}} title="Edit">✏️</button>}
+                    </div>
                   </div>
                 </div>;
               })}
@@ -1537,7 +1800,7 @@ export default function App() {
               <Btn onClick={()=>{setFGoal({...blankGoal,wallet:wallets[0]?.id||""});openM("goal");}}>+ New Goal</Btn>
             </div>
             <div className="grid-2" style={{ gap: 14 }}>
-              {goals.map(g=><GoalCard key={g.id} g={g} wallets={wallets} disp={disp} onFund={fundGoal} C={C} Bar={Bar}/>)}
+              {goals.map(g=><GoalCard key={g.id} g={g} wallets={wallets} disp={disp} onFund={fundGoal} onEdit={openEditGoal} C={C} Bar={Bar}/>)}
               {goals.length===0&&<div style={{gridColumn:"1/-1",textAlign:"center",color:C.textFaint,padding:"40px 0",fontSize:13}}>No goals yet. Create one to start saving with purpose.</div>}
             </div>
           </div>
@@ -1584,7 +1847,7 @@ export default function App() {
               <div><div style={{fontFamily:"'DM Serif Display',serif",fontSize:24}}>Investments</div><div style={{color:C.textMuted,fontSize:12}}>Portfolio overview</div></div>
               <div style={{display:"flex",gap:8}}>
                 <Btn onClick={()=>{setFRet({...blankRet,investmentId:investments[0]?.id||"",wallet:wallets[0]?.id||""});openM("ret");}} outline color={C.gold} small>+ Record Return</Btn>
-                <Btn onClick={()=>{setFInv({...blankInv,wallet:wallets[0]?.id||""});openM("inv");}} small>+ Add Investment</Btn>
+                <Btn onClick={()=>{setEditInv(null);setFInv({...blankInv,wallet:wallets[0]?.id||""});openM("inv");}} small>+ Add Investment</Btn>
               </div>
             </div>
             {(()=>{
@@ -1628,7 +1891,10 @@ export default function App() {
                       </div>)}
                     </div>}
                   </div>
-                  <Sparkline values={[inv.buyPrice,inv.buyPrice*0.93,inv.buyPrice*1.02,inv.buyPrice*0.97,inv.currentPrice*0.98,inv.currentPrice]} color={gain>=0?C.teal:C.coral} width={80} height={40}/>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8}}>
+                    <Sparkline values={[inv.buyPrice,inv.buyPrice*0.93,inv.buyPrice*1.02,inv.buyPrice*0.97,inv.currentPrice*0.98,inv.currentPrice]} color={gain>=0?C.teal:C.coral} width={80} height={40}/>
+                    <button onClick={()=>openEditInv(inv)} style={{background:"none",border:`1px solid ${C.navyLight}`,borderRadius:6,color:C.textMuted,padding:"3px 8px",cursor:"pointer",fontSize:10}}>✏️ Edit</button>
+                  </div>
                 </div>
               </Card>;
             })}
@@ -1642,8 +1908,8 @@ export default function App() {
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
               <div><div style={{fontFamily:"'DM Serif Display',serif",fontSize:24}}>Loans & Debt</div><div style={{color:C.textMuted,fontSize:12}}>Remaining: {disp(totalDebt)}</div></div>
               <div style={{display:"flex",gap:8}}>
-                <Btn onClick={()=>{setFRepay({...blankRepay,loanId:loans[0]?.id||"",wallet:wallets[0]?.id||""});openM("repay");}} outline color={C.coral} small>Record Repayment</Btn>
-                <Btn onClick={()=>{setFLoan(blankLoan);openM("loan");}}>+ Add Loan</Btn>
+                <Btn onClick={()=>{setEditRepay(null);setFRepay({...blankRepay,loanId:loans[0]?.id||"",wallet:wallets[0]?.id||""});openM("repay");}} outline color={C.coral} small>Record Repayment</Btn>
+                <Btn onClick={()=>{setEditLoan(null);setFLoan(blankLoan);openM("loan");}}>+ Add Loan</Btn>
               </div>
             </div>
             <div className="grid-3">
@@ -1655,14 +1921,18 @@ export default function App() {
               <div style={{fontSize:36,marginBottom:12}}>🏦</div>
               <div style={{fontWeight:600,fontSize:15,marginBottom:6}}>No loans yet</div>
               <div style={{color:C.textMuted,fontSize:12,marginBottom:16}}>Track loans, repayments, and interest splits.</div>
-              <Btn onClick={()=>{setFLoan(blankLoan);openM("loan");}}>+ Add Your First Loan</Btn>
+              <Btn onClick={()=>{setEditLoan(null);setFLoan(blankLoan);openM("loan");}}>+ Add Your First Loan</Btn>
             </Card>:loans.map(l=>{
               const paid=l.principal-l.remaining,pct=l.principal>0?(paid/l.principal)*100:0;
               const monthsLeft=l.monthlyPayment>0?Math.ceil(l.remaining/l.monthlyPayment):0;
               return<Card key={l.id} style={{borderLeft:`3px solid ${C.coral}`}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
                   <div><div style={{fontWeight:700,fontSize:15}}>{l.name}</div><div style={{color:C.textMuted,fontSize:11}}>{l.lender} · {l.rate||l.interest_rate}% p.a. · {l.currency}</div></div>
-                  <div style={{textAlign:"right"}}><div style={{fontFamily:"'DM Serif Display',serif",fontSize:22,color:C.coral}}>{disp(l.remaining)}</div><div style={{color:C.textMuted,fontSize:10}}>remaining</div></div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontFamily:"'DM Serif Display',serif",fontSize:22,color:C.coral}}>{disp(l.remaining)}</div>
+                    <div style={{color:C.textMuted,fontSize:10}}>remaining</div>
+                    <button onClick={()=>openEditLoan(l)} style={{background:"none",border:`1px solid ${C.navyLight}`,borderRadius:6,color:C.textMuted,padding:"3px 8px",cursor:"pointer",fontSize:10,marginTop:4}}>✏️ Edit Loan</button>
+                  </div>
                 </div>
                 <Bar value={paid} max={l.principal} color={C.teal}/>
                 <div style={{display:"flex",gap:10,marginTop:7,fontSize:11,flexWrap:"wrap"}}>
@@ -1679,10 +1949,13 @@ export default function App() {
                       <div style={{fontSize:10,color:C.textMuted}}>Principal: {disp(r.principal||r.principal_kes||0)} · Interest: {disp(r.interest||r.interest_kes||0)}</div>
                       {r.attachments?.length>0&&<div style={{fontSize:10,color:C.blue,marginTop:2}}>📎 {r.attachments.join(", ")}</div>}
                     </div>
-                    <Badge color={C.teal}>Paid</Badge>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <Badge color={C.teal}>Paid</Badge>
+                      <button onClick={()=>openEditRepay(l,r)} style={{background:"none",border:"none",color:C.textMuted,cursor:"pointer",fontSize:11,padding:"2px 4px"}} title="Edit repayment">✏️</button>
+                    </div>
                   </div>)}
                 </div>}
-                <div style={{marginTop:10}}><Btn onClick={()=>{setFRepay({...blankRepay,loanId:l.id,wallet:wallets[0]?.id||""});openM("repay");}} outline color={C.coral} style={{width:"100%",padding:"8px 0",fontSize:12}}>+ Record Repayment</Btn></div>
+                <div style={{marginTop:10}}><Btn onClick={()=>{setEditRepay(null);setFRepay({...blankRepay,loanId:l.id,wallet:wallets[0]?.id||""});openM("repay");}} outline color={C.coral} style={{width:"100%",padding:"8px 0",fontSize:12}}>+ Record Repayment</Btn></div>
               </Card>;
             })}
           </div>
@@ -1771,20 +2044,21 @@ export default function App() {
 
       {/* ════════════════════ MODALS ════════════════════════════════════════ */}
 
-      {/* Add Transaction */}
-      <Modal open={isOpen("tx")} onClose={()=>closeM("tx")} title="Add Transaction">
+      {/* Add / Edit Transaction */}
+      <Modal open={isOpen("tx")} onClose={()=>{closeM("tx");setEditTx(null);}} title={editTx?"✏️ Edit Transaction":"Add Transaction"}>
         <Field label="Type" value={fTx.type} onChange={v=>setFTx({...fTx,type:v,category:v==="income"?incCats[0]?.id||"":expCats[0]?.id||""})} options={[{value:"expense",label:"💸 Expense"},{value:"income",label:"💰 Income"}]}/>
         <Field label="Category" value={fTx.category} onChange={v=>setFTx({...fTx,category:v})} options={(fTx.type==="expense"?expCats:incCats).map(c=>({value:c.id,label:`${c.icon} ${c.name}`}))}/>
         <Field label="Amount" type="number" value={fTx.amount} onChange={v=>setFTx({...fTx,amount:v})} placeholder="0.00" note="In wallet's native currency"/>
         <Field label="Account / Wallet" value={fTx.wallet} onChange={v=>setFTx({...fTx,wallet:v})} options={wOpts}/>
+        <Field label="Date" type="date" value={fTx.date||todayStr()} onChange={v=>setFTx({...fTx,date:v})}/>
         <Field label="Merchant / Source" value={fTx.merchant} onChange={v=>setFTx({...fTx,merchant:v})} placeholder="e.g. Naivas"/>
         <Field label="Note (optional)" value={fTx.note} onChange={v=>setFTx({...fTx,note:v})} placeholder="e.g. Weekly groceries"/>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,padding:"10px 12px",background:C.navyLight,borderRadius:10}}>
+        {!editTx&&<><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,padding:"10px 12px",background:C.navyLight,borderRadius:10}}>
           <input type="checkbox" id="isRecurChk" checked={!!fTx.isRecurring} onChange={e=>setFTx({...fTx,isRecurring:e.target.checked})} style={{accentColor:C.teal,width:16,height:16}}/>
           <label htmlFor="isRecurChk" style={{color:C.textMuted,fontSize:13,cursor:"pointer"}}>🔁 Make recurring</label>
         </div>
-        {fTx.isRecurring&&<Field label="Frequency" value={fTx.freq} onChange={v=>setFTx({...fTx,freq:v})} options={[{value:"daily",label:"Daily"},{value:"weekly",label:"Weekly"},{value:"monthly",label:"Monthly"},{value:"yearly",label:"Yearly"}]}/>}
-        <Btn onClick={addTx} style={{width:"100%",padding:13,fontSize:14}}>Add {fTx.type==="income"?"Income":"Expense"}</Btn>
+        {fTx.isRecurring&&<Field label="Frequency" value={fTx.freq} onChange={v=>setFTx({...fTx,freq:v})} options={[{value:"daily",label:"Daily"},{value:"weekly",label:"Weekly"},{value:"monthly",label:"Monthly"},{value:"yearly",label:"Yearly"}]}/>}</>}
+        <Btn onClick={saveTx} style={{width:"100%",padding:13,fontSize:14}}>{editTx?"Save Changes":`Add ${fTx.type==="income"?"Income":"Expense"}`}</Btn>
       </Modal>
 
       {/* Transfer */}
@@ -1796,17 +2070,17 @@ export default function App() {
         <Btn onClick={doTransfer} style={{width:"100%",padding:13,fontSize:14}}>Transfer Funds</Btn>
       </Modal>
 
-      {/* Add Wallet */}
-      <Modal open={isOpen("wallet")} onClose={()=>closeM("wallet")} title="🏦 Add Account / Wallet">
+      {/* Add / Edit Wallet */}
+      <Modal open={isOpen("wallet")} onClose={()=>{closeM("wallet");setEditWal(null);}} title={editWal?"✏️ Edit Account":"🏦 Add Account / Wallet"}>
         <Field label="Account Name" value={fWal.name} onChange={v=>setFWal({...fWal,name:v})} placeholder="e.g. Equity Bank Current"/>
         <Field label="Account Type" value={fWal.accountType} onChange={v=>setFWal({...fWal,accountType:v})} options={[{value:"current",label:"🏦 Current / Checking"},{value:"savings",label:"💰 Savings Account"},{value:"investment",label:"📈 Investment Account"},{value:"cash",label:"👛 Cash Wallet"},{value:"digital",label:"📱 Mobile Money"}]}/>
         <Field label="Currency" value={fWal.currency} onChange={v=>setFWal({...fWal,currency:v})} options={currencies.map(c=>({value:c.code,label:`${c.code} – ${c.name} (${c.symbol})`}))}/>
-        <Field label={`Opening Balance (${fWal.currency})`} type="number" value={fWal.openingBalance} onChange={v=>setFWal({...fWal,openingBalance:v})} placeholder="0.00"/>
+        <Field label={editWal?`Current Balance (${fWal.currency})`:`Opening Balance (${fWal.currency})`} type="number" value={fWal.openingBalance} onChange={v=>setFWal({...fWal,openingBalance:v})} placeholder="0.00"/>
         <div className="grid-2">
           <Field label="Icon"   value={fWal.icon}  onChange={v=>setFWal({...fWal,icon:v})}  options={ICONS.map(i=>({value:i,label:i}))}/>
           <Field label="Colour" value={fWal.color} onChange={v=>setFWal({...fWal,color:v})} options={CAT_COLORS.map(col=>({value:col,label:col}))}/>
         </div>
-        <Btn onClick={addWallet} style={{width:"100%",padding:13,fontSize:14}}>Create Account</Btn>
+        <Btn onClick={saveWallet} style={{width:"100%",padding:13,fontSize:14}}>{editWal?"Save Changes":"Create Account"}</Btn>
       </Modal>
 
       {/* Add Expense Category */}
@@ -1842,8 +2116,8 @@ export default function App() {
         <Btn onClick={saveBudget} style={{width:"100%",padding:13,fontSize:14}}>Save</Btn>
       </Modal>
 
-      {/* Add Loan */}
-      <Modal open={isOpen("loan")} onClose={()=>closeM("loan")} title="🏦 Add Loan">
+      {/* Add / Edit Loan */}
+      <Modal open={isOpen("loan")} onClose={()=>{closeM("loan");setEditLoan(null);}} title={editLoan?"✏️ Edit Loan":"🏦 Add Loan"}>
         <Field label="Loan Name" value={fLoan.name}   onChange={v=>setFLoan({...fLoan,name:v})}   placeholder="e.g. KCB Personal Loan"/>
         <Field label="Lender"    value={fLoan.lender} onChange={v=>setFLoan({...fLoan,lender:v})} placeholder="e.g. KCB Bank"/>
         <Field label="Currency"  value={fLoan.currency} onChange={v=>setFLoan({...fLoan,currency:v})} options={currencies.map(c=>({value:c.code,label:`${c.code} – ${c.name}`}))}/>
@@ -1856,12 +2130,12 @@ export default function App() {
           <Field label="Next Due Date" type="date" value={fLoan.nextDue} onChange={v=>setFLoan({...fLoan,nextDue:v})}/>
         </div>
         {fLoan.principal&&fLoan.rate&&fLoan.monthlyPayment&&<div style={{background:C.navyLight,borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:C.textMuted}}>💡 Estimated payoff: <strong style={{color:C.teal}}>{Math.ceil(parseFloat(fLoan.principal)/parseFloat(fLoan.monthlyPayment))} months</strong></div>}
-        <Btn onClick={addLoan} style={{width:"100%",padding:13,fontSize:14}}>Add Loan</Btn>
+        <Btn onClick={saveLoan} style={{width:"100%",padding:13,fontSize:14}}>{editLoan?"Save Changes":"Add Loan"}</Btn>
       </Modal>
 
-      {/* Record Repayment */}
-      <Modal open={isOpen("repay")} onClose={()=>closeM("repay")} title="💳 Record Loan Repayment">
-        <Field label="Loan" value={fRepay.loanId} onChange={v=>setFRepay({...fRepay,loanId:v})} options={loanOpts}/>
+      {/* Record / Edit Repayment */}
+      <Modal open={isOpen("repay")} onClose={()=>{closeM("repay");setEditRepay(null);}} title={editRepay?"✏️ Edit Repayment":"💳 Record Loan Repayment"}>
+        {!editRepay&&<Field label="Loan" value={fRepay.loanId} onChange={v=>setFRepay({...fRepay,loanId:v})} options={loanOpts}/>}
         {(()=>{const l=loans.find(ln=>ln.id===fRepay.loanId);return l?<div style={{background:C.navyLight,borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:11,color:C.textMuted}}>Outstanding: <strong style={{color:C.coral}}>{disp(l.remaining)}</strong> · Monthly: <strong style={{color:C.gold}}>{disp(l.monthlyPayment)}</strong></div>:null;})()}
         <Field label="Payment Date" type="date" value={fRepay.date} onChange={v=>setFRepay({...fRepay,date:v})}/>
         <Field label="Pay From Wallet" value={fRepay.wallet} onChange={v=>setFRepay({...fRepay,wallet:v})} options={wOpts}/>
@@ -1872,13 +2146,12 @@ export default function App() {
           <Field label="Interest Portion"  type="number" value={fRepay.interest}  onChange={v=>{const int=parseFloat(v)||0,tot=parseFloat(fRepay.total)||0;setFRepay({...fRepay,interest:v,principal:String((tot-int).toFixed(2))});}} placeholder="0.00"/>
         </div>
         <Field label="Note (optional)" value={fRepay.note} onChange={v=>setFRepay({...fRepay,note:v})} placeholder="e.g. June repayment"/>
-        <Divider label="Attachments"/>
-        <FileUpload label="Repayment Plan / Statement" accept=".pdf,.csv,.jpg,.png" onFile={f=>setFRepay({...fRepay,files:[...fRepay.files,f]})} files={fRepay.files}/>
-        <Btn onClick={addRepayment} style={{width:"100%",padding:13,fontSize:14}}>Record Repayment</Btn>
+        {!editRepay&&<><Divider label="Attachments"/><FileUpload label="Repayment Plan / Statement" accept=".pdf,.csv,.jpg,.png" onFile={f=>setFRepay({...fRepay,files:[...fRepay.files,f]})} files={fRepay.files}/></>}
+        <Btn onClick={saveRepayment} style={{width:"100%",padding:13,fontSize:14}}>{editRepay?"Save Changes":"Record Repayment"}</Btn>
       </Modal>
 
-      {/* Add Investment */}
-      <Modal open={isOpen("inv")} onClose={()=>closeM("inv")} title="📈 Add Investment">
+      {/* Add / Edit Investment */}
+      <Modal open={isOpen("inv")} onClose={()=>{closeM("inv");setEditInv(null);}} title={editInv?"✏️ Edit Investment":"📈 Add Investment"}>
         <Field label="Name" value={fInv.name} onChange={v=>setFInv({...fInv,name:v})} placeholder="e.g. Safaricom PLC"/>
         <div className="grid-2">
           <Field label="Ticker" value={fInv.ticker} onChange={v=>setFInv({...fInv,ticker:v})} placeholder="e.g. SCOM"/>
@@ -1889,8 +2162,9 @@ export default function App() {
           <Field label="Units / Shares" type="number" value={fInv.units} onChange={v=>setFInv({...fInv,units:v})} placeholder="e.g. 1000"/>
           <Field label={`Buy Price (${fInv.currency})`} type="number" value={fInv.buyPrice} onChange={v=>setFInv({...fInv,buyPrice:v})} placeholder="e.g. 22.50"/>
         </div>
+        {editInv&&<Field label={`Current Price (${fInv.currency})`} type="number" value={fInv.currentPrice||""} onChange={v=>setFInv({...fInv,currentPrice:v})} placeholder="e.g. 24.00" note="Updates portfolio value"/>}
         <Field label="Linked Account" value={fInv.wallet} onChange={v=>setFInv({...fInv,wallet:v})} options={wOpts}/>
-        <Btn onClick={addInvestment} style={{width:"100%",padding:13,fontSize:14}}>Add Investment</Btn>
+        <Btn onClick={saveInvestment} style={{width:"100%",padding:13,fontSize:14}}>{editInv?"Save Changes":"Add Investment"}</Btn>
       </Modal>
 
       {/* Record Return */}
@@ -1906,8 +2180,8 @@ export default function App() {
         <Btn onClick={addReturn} style={{width:"100%",padding:13,fontSize:14}}>Record Return</Btn>
       </Modal>
 
-      {/* New Goal */}
-      <Modal open={isOpen("goal")} onClose={()=>closeM("goal")} title="🏆 New Savings Goal">
+      {/* New / Edit Goal */}
+      <Modal open={isOpen("goal")} onClose={()=>{closeM("goal");setEditGoal(null);}} title={editGoal?"✏️ Edit Goal":"🏆 New Savings Goal"}>
         <Field label="Goal Name" value={fGoal.name} onChange={v=>setFGoal({...fGoal,name:v})} placeholder="e.g. Emergency Fund"/>
         <div className="grid-2">
           <Field label="Icon"   value={fGoal.icon}  onChange={v=>setFGoal({...fGoal,icon:v})}  options={ICONS.map(i=>({value:i,label:i}))}/>
@@ -1916,7 +2190,7 @@ export default function App() {
         <Field label={`Target Amount (${baseCurrency})`} type="number" value={fGoal.target} onChange={v=>setFGoal({...fGoal,target:v})} placeholder="e.g. 450000"/>
         <Field label="Save Into" value={fGoal.wallet} onChange={v=>setFGoal({...fGoal,wallet:v})} options={wOpts}/>
         <Field label="Target Date" type="date" value={fGoal.deadline} onChange={v=>setFGoal({...fGoal,deadline:v})}/>
-        <Btn onClick={addGoal} style={{width:"100%",padding:13,fontSize:14}}>Create Goal</Btn>
+        <Btn onClick={saveGoal} style={{width:"100%",padding:13,fontSize:14}}>{editGoal?"Save Changes":"Create Goal"}</Btn>
       </Modal>
 
       {/* Add Recurring */}

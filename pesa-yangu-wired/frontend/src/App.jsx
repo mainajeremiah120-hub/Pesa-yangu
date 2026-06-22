@@ -495,6 +495,14 @@ export default function App() {
   const [fGoal,   setFGoal]  = useState(blankGoal);
   const [fRecur,  setFRecur] = useState(blankRecur);
 
+  // Edit tracking — null means we're creating, an id means we're editing
+  const [editingTx,     setEditingTx]     = useState(null);
+  const [editingWal,    setEditingWal]    = useState(null);
+  const [editingGoal,   setEditingGoal]   = useState(null);
+  const [editingInv,    setEditingInv]    = useState(null);
+  const [editingLoan,   setEditingLoan]   = useState(null);
+  const [editingRepay,  setEditingRepay]  = useState(null); // { loanId, repayId }
+
   // Reconcile
   const [recoWallet,  setRecoWallet]  = useState("");
   const [recoRows,    setRecoRows]    = useState([]);
@@ -506,6 +514,95 @@ export default function App() {
   const [importBusy,  setImportBusy]  = useState(false);
 
   // ─────────────────────────────────────────────────────────────────────────
+  // EDIT OPENERS — pre-fill form and open modal in edit mode
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const openEditTx = (t) => {
+    setEditingTx(t.id);
+    setFTx({
+      type:        t.type,
+      category:    t.category || t.category_id || "",
+      amount:      String(t.amount || parseFloat(t.amount_kes || 0)),
+      wallet:      t.wallet || t.wallet_id || "",
+      note:        t.note || "",
+      merchant:    t.merchant || "",
+      date:        t.date || t.tx_date || todayStr(),
+      isRecurring: false,
+      freq:        "monthly",
+    });
+    openM("tx");
+  };
+
+  const openEditWal = (w) => {
+    setEditingWal(w.id);
+    setFWal({
+      name:           w.name,
+      accountType:    w.account_type || w.accountType || "current",
+      currency:       w.currency,
+      icon:           w.icon,
+      color:          w.color,
+      openingBalance: String(parseFloat(w.balance || 0)),
+    });
+    openM("wallet");
+  };
+
+  const openEditGoal = (g) => {
+    setEditingGoal(g.id);
+    setFGoal({
+      name:     g.name,
+      icon:     g.icon,
+      color:    g.color,
+      target:   String(g.target),
+      wallet:   g.wallet || g.wallet_id || "",
+      deadline: g.deadline || "",
+    });
+    openM("goal");
+  };
+
+  const openEditInv = (inv) => {
+    setEditingInv(inv.id);
+    setFInv({
+      name:     inv.name,
+      ticker:   inv.ticker || "",
+      type:     inv.type,
+      units:    String(inv.units),
+      buyPrice: String(inv.buyPrice),
+      currency: inv.currency,
+      wallet:   inv.wallet || inv.wallet_id || "",
+    });
+    openM("inv");
+  };
+
+  const openEditLoan = (l) => {
+    setEditingLoan(l.id);
+    setFLoan({
+      name:           l.name,
+      lender:         l.lender || "",
+      principal:      String(l.principal),
+      rate:           String(l.rate || 0),
+      monthlyPayment: String(l.monthlyPayment),
+      nextDue:        l.nextDue || l.next_due_date || "",
+      currency:       l.currency,
+    });
+    openM("loan");
+  };
+
+  const openEditRepay = (loanId, r, repayId) => {
+    setEditingRepay({ loanId, repayId });
+    setFRepay({
+      loanId,
+      wallet:    r.wallet_id || "",
+      total:     String(r.total || r.total_kes || 0),
+      principal: String(r.principal || r.principal_kes || 0),
+      interest:  String(r.interest  || r.interest_kes  || 0),
+      date:      r.date || r.payment_date || todayStr(),
+      note:      r.note || "",
+      files:     [],
+    });
+    openM("repay");
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
   // API ACTIONS  (optimistic UI: update state first, then call API)
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -513,6 +610,33 @@ export default function App() {
   const walletCur = (wid) => wallets.find(w=>w.id===wid)?.currency||"KES";
 
   const addTx = async () => {
+    // EDIT MODE
+    if (editingTx) {
+      const amt = parseFloat(fTx.amount); if(!amt) return;
+      const wid = fTx.wallet;
+      const amtKES = toKES(amt, walletCur(wid), currencies);
+      try {
+        const { transaction: tx } = await txApi.update(editingTx, {
+          wallet_id:   wid,
+          category_id: fTx.category || undefined,
+          type:        fTx.type,
+          amount_kes:  amtKES,
+          merchant:    fTx.merchant || undefined,
+          note:        fTx.note || undefined,
+          tx_date:     fTx.date || todayStr(),
+        });
+        setTxs(p => p.map(t => t.id === editingTx
+          ? { ...tx, wallet:tx.wallet_id, category:tx.category_id, amount:parseFloat(tx.amount_kes), date:tx.tx_date }
+          : t
+        ));
+        // Reload wallets to get accurate balances
+        const { wallets: freshW } = await walletsApi.list();
+        setWallets(freshW || []);
+        setEditingTx(null); setFTx(blankTx); closeM("tx");
+        showToast("Transaction updated");
+      } catch(err) { showToast(err?.response?.data?.error || "Failed to update", C.coral); }
+      return;
+    }
     const amt = parseFloat(fTx.amount); if(!amt) return;
     const wid = fTx.wallet;
     const amtKES = toKES(amt, walletCur(wid), currencies);
@@ -561,6 +685,23 @@ export default function App() {
 
   const addWallet = async () => {
     if(!fWal.name) return;
+    // EDIT MODE
+    if (editingWal) {
+      try {
+        const { wallet } = await walletsApi.update(editingWal, {
+          name:         fWal.name,
+          account_type: fWal.accountType,
+          currency:     fWal.currency,
+          color:        fWal.color,
+          icon:         fWal.icon,
+          balance:      toKES(parseFloat(fWal.openingBalance)||0, fWal.currency, currencies),
+        });
+        setWallets(p => p.map(w => w.id === editingWal ? wallet : w));
+        setEditingWal(null); setFWal(blankWal); closeM("wallet");
+        showToast("Account updated");
+      } catch(err) { showToast(err?.response?.data?.error || "Failed", C.coral); }
+      return;
+    }
     if(wallets.length>=limits.wallets) { openM("billing"); return; }
     try {
       const bal = toKES(parseFloat(fWal.openingBalance)||0, fWal.currency, currencies);
@@ -616,8 +757,26 @@ export default function App() {
   };
 
   const addLoan = async () => {
-    if(loans.length>=limits.loans) { openM("billing"); return; }
     const p = parseFloat(fLoan.principal); if(!p||!fLoan.name) return;
+    // EDIT MODE
+    if (editingLoan) {
+      try {
+        const { loan } = await loansApi.update(editingLoan, {
+          name:                fLoan.name,
+          lender:              fLoan.lender || undefined,
+          currency:            fLoan.currency,
+          principal_kes:       toKES(p, fLoan.currency, currencies),
+          interest_rate:       parseFloat(fLoan.rate) || 0,
+          monthly_payment_kes: toKES(parseFloat(fLoan.monthlyPayment)||0, fLoan.currency, currencies),
+          next_due_date:       fLoan.nextDue || undefined,
+        });
+        setLoans(prev => prev.map(l => l.id === editingLoan ? normaliseLoan({...loan, repayments: l.repayments}) : l));
+        setEditingLoan(null); setFLoan(blankLoan); closeM("loan");
+        showToast("Loan updated");
+      } catch(err) { showToast(err?.response?.data?.error || "Failed", C.coral); }
+      return;
+    }
+    if(loans.length>=limits.loans) { openM("billing"); return; }
     try {
       const { loan } = await loansApi.create({
         name:fLoan.name, lender:fLoan.lender||undefined, currency:fLoan.currency,
@@ -635,6 +794,28 @@ export default function App() {
   const addRepayment = async () => {
     const total = parseFloat(fRepay.total); if(!total) return;
     const loan  = loans.find(l=>l.id===fRepay.loanId); if(!loan) return;
+    // EDIT MODE
+    if (editingRepay) {
+      try {
+        const { repayment } = await loansApi.updateRepayment(editingRepay.loanId, editingRepay.repayId, {
+          total_kes:     toKES(total, loan.currency, currencies),
+          principal_kes: toKES(parseFloat(fRepay.principal)||0, loan.currency, currencies),
+          interest_kes:  toKES(parseFloat(fRepay.interest)||0,  loan.currency, currencies),
+          payment_date:  fRepay.date,
+          note:          fRepay.note || undefined,
+        });
+        setLoans(prev => prev.map(l => l.id === loan.id ? {
+          ...l,
+          repayments: l.repayments.map(r => (r.id||r.repayId) === editingRepay.repayId
+            ? { ...r, total:parseFloat(repayment.total_kes), principal:parseFloat(repayment.principal_kes), interest:parseFloat(repayment.interest_kes), date:repayment.payment_date, note:repayment.note }
+            : r
+          )
+        } : l));
+        setEditingRepay(null); setFRepay(blankRepay); closeM("repay");
+        showToast("Repayment updated");
+      } catch(err) { showToast(err?.response?.data?.error || "Failed", C.coral); }
+      return;
+    }
     try {
       const { repayment } = await loansApi.recordRepayment(loan.id, {
         wallet_id:    fRepay.wallet,
@@ -655,9 +836,28 @@ export default function App() {
   };
 
   const addInvestment = async () => {
-    if(investments.length>=limits.investments) { openM("billing"); return; }
     const units=parseFloat(fInv.units), price=parseFloat(fInv.buyPrice);
     if(!units||!price||!fInv.name) return;
+    // EDIT MODE
+    if (editingInv) {
+      try {
+        const { investment: inv } = await invsApi.update(editingInv, {
+          name:              fInv.name,
+          ticker:            fInv.ticker || undefined,
+          type:              fInv.type,
+          currency:          fInv.currency,
+          units,
+          buy_price_kes:     toKES(price, fInv.currency, currencies),
+          current_price_kes: toKES(price, fInv.currency, currencies),
+          wallet_id:         fInv.wallet || undefined,
+        });
+        setInvestments(prev => prev.map(i => i.id === editingInv ? normaliseInv({...inv, returns: i.returns}) : i));
+        setEditingInv(null); setFInv(blankInv); closeM("inv");
+        showToast("Investment updated");
+      } catch(err) { showToast(err?.response?.data?.error || "Failed", C.coral); }
+      return;
+    }
+    if(investments.length>=limits.investments) { openM("billing"); return; }
     try {
       const { investment: inv } = await invsApi.create({
         wallet_id:         fInv.wallet,
@@ -693,8 +893,25 @@ export default function App() {
   };
 
   const addGoal = async () => {
-    if(goals.length>=limits.goals) { openM("billing"); return; }
     const t=parseFloat(fGoal.target); if(!t||!fGoal.name) return;
+    // EDIT MODE
+    if (editingGoal) {
+      try {
+        const { goal } = await goalsApi.update(editingGoal, {
+          name:       fGoal.name,
+          icon:       fGoal.icon,
+          color:      fGoal.color,
+          target_kes: t,
+          deadline:   fGoal.deadline || undefined,
+          wallet_id:  fGoal.wallet || undefined,
+        });
+        setGoals(prev => prev.map(g => g.id === editingGoal ? normaliseGoal(goal) : g));
+        setEditingGoal(null); setFGoal(blankGoal); closeM("goal");
+        showToast("Goal updated");
+      } catch(err) { showToast(err?.response?.data?.error || "Failed", C.coral); }
+      return;
+    }
+    if(goals.length>=limits.goals) { openM("billing"); return; }
     try {
       const { goal } = await goalsApi.create({
         wallet_id:  fGoal.wallet,

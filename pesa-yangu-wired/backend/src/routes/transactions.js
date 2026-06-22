@@ -50,6 +50,49 @@ router.post("/", async (req, res, next) => {
   } catch(e){if(e instanceof z.ZodError) return res.status(400).json({error:e.errors[0].message}); next(e);}
 });
 
+router.patch("/:id", async (req, res, next) => {
+  try {
+    const {rows} = await query("SELECT * FROM transactions WHERE id=$1 AND user_id=$2",[req.params.id,req.user.id]);
+    if(!rows.length) return res.status(404).json({error:"Not found"});
+    const tx = rows[0];
+    const d = z.object({
+      wallet_id:   z.string().uuid().optional(),
+      category_id: z.string().uuid().nullable().optional(),
+      type:        z.enum(["expense","income","transfer_in","transfer_out"]).optional(),
+      amount_kes:  z.number().positive().optional(),
+      merchant:    z.string().nullable().optional(),
+      note:        z.string().nullable().optional(),
+      tx_date:     z.string().optional(),
+    }).parse(req.body);
+
+    await withTransaction(async(client)=>{
+      // Reverse old wallet balance effect
+      const oldDelta=(tx.type==="income"||tx.type==="transfer_in")?-parseFloat(tx.amount_kes):parseFloat(tx.amount_kes);
+      await client.query("UPDATE wallets SET balance=balance+$1 WHERE id=$2",[oldDelta,tx.wallet_id]);
+
+      const newWalletId  = d.wallet_id   || tx.wallet_id;
+      const newType      = d.type        || tx.type;
+      const newAmountKes = d.amount_kes  ?? parseFloat(tx.amount_kes);
+
+      const fields=["wallet_id","category_id","type","amount_kes","merchant","note","tx_date"];
+      const updates={wallet_id:newWalletId,category_id:d.category_id??tx.category_id,type:newType,amount_kes:newAmountKes,merchant:d.merchant??tx.merchant,note:d.note??tx.note,tx_date:d.tx_date||tx.tx_date};
+      const sets=fields.map((k,i)=>`${k}=$${i+2}`);
+      await client.query(`UPDATE transactions SET ${sets.join(",")} WHERE id=$1`,[tx.id,...fields.map(k=>updates[k])]);
+
+      // Apply new balance effect
+      const newDelta=(newType==="income"||newType==="transfer_in")?newAmountKes:-newAmountKes;
+      await client.query("UPDATE wallets SET balance=balance+$1 WHERE id=$2",[newDelta,newWalletId]);
+    });
+
+    const {rows:updated}=await query(
+      `SELECT t.*,c.name AS category_name,c.icon AS category_icon,c.color AS category_color,w.name AS wallet_name,w.currency AS wallet_currency
+       FROM transactions t LEFT JOIN categories c ON c.id=t.category_id LEFT JOIN wallets w ON w.id=t.wallet_id WHERE t.id=$1`,
+      [req.params.id]
+    );
+    res.json({transaction:updated[0]});
+  } catch(e){if(e instanceof z.ZodError) return res.status(400).json({error:e.errors[0].message}); next(e);}
+});
+
 router.delete("/:id", async (req, res, next) => {
   try {
     const {rows}=await query("SELECT * FROM transactions WHERE id=$1 AND user_id=$2",[req.params.id,req.user.id]);

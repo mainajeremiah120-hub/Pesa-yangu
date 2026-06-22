@@ -34,8 +34,13 @@ router.post("/", async (req, res, next) => {
 
 router.patch("/:id", async (req, res, next) => {
   try {
-    const allowed=["name","color","icon","sort_order","is_archived"];
+    const allowed=["name","color","icon","sort_order","is_archived","account_type","currency"];
     const updates=Object.fromEntries(Object.entries(req.body).filter(([k])=>allowed.includes(k)));
+    // Handle balance separately with explicit balance adjustment
+    if(req.body.balance !== undefined) {
+      const newBal = parseFloat(req.body.balance);
+      if(!isNaN(newBal)) updates.balance = newBal;
+    }
     if(!Object.keys(updates).length) return res.status(400).json({error:"No valid fields"});
     const sets=Object.keys(updates).map((k,i)=>`${k}=$${i+3}`);
     const {rows}=await query(`UPDATE wallets SET ${sets.join(",")} WHERE id=$1 AND user_id=$2 RETURNING *`,[req.params.id,req.user.id,...Object.values(updates)]);

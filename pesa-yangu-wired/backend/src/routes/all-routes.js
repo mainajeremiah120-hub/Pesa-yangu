@@ -122,6 +122,18 @@ goalRouter.post("/:id/fund", async (req,res,next)=>{
   } catch(e){if(e instanceof z.ZodError) return res.status(400).json({error:e.errors[0].message}); next(e);}
 });
 
+goalRouter.patch("/:id", async (req,res,next)=>{
+  try {
+    const allowed=["name","icon","color","target_kes","deadline","wallet_id"];
+    const u=Object.fromEntries(Object.entries(req.body).filter(([k])=>allowed.includes(k)));
+    if(!Object.keys(u).length) return res.status(400).json({error:"No valid fields"});
+    const sets=Object.keys(u).map((k,i)=>`${k}=$${i+3}`);
+    const {rows}=await query(`UPDATE goals SET ${sets.join(",")} WHERE id=$1 AND user_id=$2 RETURNING *`,[req.params.id,req.user.id,...Object.values(u)]);
+    if(!rows.length) return res.status(404).json({error:"Not found"});
+    res.json({goal:rows[0]});
+  } catch(e){next(e);}
+});
+
 goalRouter.delete("/:id", async (req,res,next)=>{
   try { await query("DELETE FROM goals WHERE id=$1 AND user_id=$2",[req.params.id,req.user.id]); res.json({ok:true}); } catch(e){next(e);}
 });
@@ -154,8 +166,11 @@ investmentRouter.post("/", async (req,res,next)=>{
 
 investmentRouter.patch("/:id", async (req,res,next)=>{
   try {
-    const {current_price_kes}=z.object({current_price_kes:z.number().positive()}).parse(req.body);
-    const {rows}=await query("UPDATE investments SET current_price_kes=$1 WHERE id=$2 AND user_id=$3 RETURNING *",[current_price_kes,req.params.id,req.user.id]);
+    const allowed=["name","ticker","type","currency","units","buy_price_kes","current_price_kes","wallet_id"];
+    const u=Object.fromEntries(Object.entries(req.body).filter(([k])=>allowed.includes(k)));
+    if(!Object.keys(u).length) return res.status(400).json({error:"No valid fields"});
+    const sets=Object.keys(u).map((k,i)=>`${k}=$${i+3}`);
+    const {rows}=await query(`UPDATE investments SET ${sets.join(",")} WHERE id=$1 AND user_id=$2 RETURNING *`,[req.params.id,req.user.id,...Object.values(u)]);
     if(!rows.length) return res.status(404).json({error:"Not found"});
     res.json({investment:rows[0]});
   } catch(e){next(e);}
@@ -227,6 +242,37 @@ loanRouter.post("/:id/repayments", upload.array("files",5), async (req,res,next)
     });
     res.status(201).json({repayment:rep});
   } catch(e){if(e instanceof z.ZodError) return res.status(400).json({error:e.errors[0].message}); next(e);}
+});
+
+loanRouter.patch("/:id", async (req,res,next)=>{
+  try {
+    const allowed=["name","lender","currency","principal_kes","interest_rate","monthly_payment_kes","next_due_date","note"];
+    const u=Object.fromEntries(Object.entries(req.body).filter(([k])=>allowed.includes(k)));
+    if(!Object.keys(u).length) return res.status(400).json({error:"No valid fields"});
+    const sets=Object.keys(u).map((k,i)=>`${k}=$${i+3}`);
+    const {rows}=await query(`UPDATE loans SET ${sets.join(",")} WHERE id=$1 AND user_id=$2 RETURNING *`,[req.params.id,req.user.id,...Object.values(u)]);
+    if(!rows.length) return res.status(404).json({error:"Not found"});
+    res.json({loan:rows[0]});
+  } catch(e){next(e);}
+});
+
+loanRouter.patch("/:id/repayments/:repayId", async (req,res,next)=>{
+  try {
+    const {rows:lr}=await query("SELECT * FROM loan_repayments WHERE id=$1 AND loan_id=$2 AND user_id=$3",[req.params.repayId,req.params.id,req.user.id]);
+    if(!lr.length) return res.status(404).json({error:"Repayment not found"});
+    const old=lr[0];
+    const allowed=["total_kes","principal_kes","interest_kes","payment_date","note"];
+    const u=Object.fromEntries(Object.entries(req.body).filter(([k])=>allowed.includes(k)));
+    if(!Object.keys(u).length) return res.status(400).json({error:"No valid fields"});
+    // Adjust loan remaining if principal changed
+    if(u.principal_kes!==undefined) {
+      const diff=parseFloat(u.principal_kes)-parseFloat(old.principal_kes);
+      await query("UPDATE loans SET remaining_kes=GREATEST(0,remaining_kes-$1) WHERE id=$2",[diff,req.params.id]);
+    }
+    const sets=Object.keys(u).map((k,i)=>`${k}=$${i+2}`);
+    const {rows}=await query(`UPDATE loan_repayments SET ${sets.join(",")} WHERE id=$1 RETURNING *`,[req.params.repayId,...Object.values(u)]);
+    res.json({repayment:rows[0]});
+  } catch(e){next(e);}
 });
 
 loanRouter.delete("/:id", async (req,res,next)=>{

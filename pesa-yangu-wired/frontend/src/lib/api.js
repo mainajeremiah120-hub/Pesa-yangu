@@ -92,6 +92,7 @@ export const walletsApi = {
 export const txApi = {
   list:      (params)  => unwrap(client.get("/transactions", { params })),
   create:    (p)       => unwrap(client.post("/transactions", p)),
+  update:    (id, p)   => unwrap(client.patch(`/transactions/${id}`, p)),
   remove:    (id)      => unwrap(client.delete(`/transactions/${id}`)),
   exportCSV: ()        => client.get("/transactions/export", { responseType: "blob" }),
   importCSV: (file)    => {
@@ -123,6 +124,7 @@ export const budgetsApi = {
 export const goalsApi = {
   list:   ()         => unwrap(client.get("/goals")),
   create: (p)        => unwrap(client.post("/goals", p)),
+  update: (id, p)    => unwrap(client.patch(`/goals/${id}`, p)),
   fund:   (id, amt)  => unwrap(client.post(`/goals/${id}/fund`, { amount: amt })),
   remove: (id)       => unwrap(client.delete(`/goals/${id}`)),
 };
@@ -138,9 +140,11 @@ export const invsApi = {
 
 // ── Loans ─────────────────────────────────────────────────────────────────────
 export const loansApi = {
-  list:            ()      => unwrap(client.get("/loans")),
-  create:          (p)     => unwrap(client.post("/loans", p)),
-  remove:          (id)    => unwrap(client.delete(`/loans/${id}`)),
+  list:              ()           => unwrap(client.get("/loans")),
+  create:            (p)          => unwrap(client.post("/loans", p)),
+  update:            (id, p)      => unwrap(client.patch(`/loans/${id}`, p)),
+  updateRepayment:   (id, rid, p) => unwrap(client.patch(`/loans/${id}/repayments/${rid}`, p)),
+  remove:            (id)         => unwrap(client.delete(`/loans/${id}`)),
   recordRepayment: (id, p) => {
     const fd = new FormData();
     Object.entries(p).forEach(([k, v]) => {

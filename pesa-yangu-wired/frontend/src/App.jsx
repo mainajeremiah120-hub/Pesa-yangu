@@ -88,10 +88,20 @@ const Badge = ({ children, color=C.teal }) => (
   </span>
 );
 
-const Card = ({ children, style={}, onClick }) => (
-  <div onClick={onClick} style={{ background:C.navyMid, borderRadius:16, padding:20, border:`1px solid ${C.navyLight}`, transition:"border-color 0.2s", cursor:onClick?"pointer":"default", ...style }}
-    onMouseEnter={e=>{ if(onClick) e.currentTarget.style.borderColor=C.teal+"66"; }}
-    onMouseLeave={e=>{ if(onClick) e.currentTarget.style.borderColor=C.navyLight; }}>
+const Card = ({ children, style={}, onClick, className="" }) => (
+  <div 
+    onClick={onClick} 
+    className={`${onClick ? "interactive-card" : ""} ${className}`}
+    style={{ 
+      background:C.navyMid, 
+      borderRadius:16, 
+      padding:20, 
+      border:`1px solid ${C.navyLight}`, 
+      cursor:onClick?"pointer":"default", 
+      transition:onClick ? "all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)" : "border-color 0.2s",
+      ...style 
+    }}
+  >
     {children}
   </div>
 );
@@ -300,7 +310,11 @@ export default function App() {
   const [dataError,   setDataError]   = useState("");
 
   // ── UI state
-  const [tab,    setTab]    = useState("dashboard");
+  const [tab,    _setTab]   = useState("dashboard");
+  const setTab = (newTab) => {
+    _setTab(newTab);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
   const [modals, setModals] = useState({});
   const openM  = (key, extra={}) => setModals(p=>({...p,[key]:{open:true,...extra}}));
   const closeM = (key)            => setModals(p=>({...p,[key]:{open:false}}));
@@ -864,6 +878,22 @@ export default function App() {
         @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
         @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
         @keyframes slideIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+
+        .interactive-card {
+          position: relative;
+        }
+        .interactive-card:hover {
+          transform: translateY(-4px) scale(1.01);
+          border-color: ${C.teal}88 !important;
+          box-shadow: 0 12px 30px rgba(0, 212, 170, 0.12), 0 4px 12px rgba(0, 0, 0, 0.2);
+          background: #1a2839 !important;
+        }
+        .interactive-card:active {
+          transform: translateY(-1px) scale(0.985);
+          box-shadow: 0 4px 10px rgba(0, 212, 170, 0.06), 0 2px 4px rgba(0, 0, 0, 0.2);
+          border-color: ${C.teal}bb !important;
+          background: #162232 !important;
+        }
       `}</style>
 
       {/* Toast */}
@@ -920,7 +950,7 @@ export default function App() {
                   </div>
                 </div>
               </Card>
-              <Card>
+              <Card onClick={() => setTab("accounts")}>
                 <div style={{color:C.textMuted,fontSize:10,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Net Worth</div>
                 <div style={{fontFamily:"'DM Serif Display',serif",fontSize:26,color:C.textPrimary}}>{disp(netWorth)}</div>
                 <div style={{color:C.textMuted,fontSize:11,marginTop:5,marginBottom:8}}>{baseCurrency} · Assets − Liabilities</div>
@@ -928,18 +958,19 @@ export default function App() {
               </Card>
             </div>
 
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-              <Card><Chip label="Total Balance" value={disp(totalBalance)} color={C.textPrimary} sub={`${wallets.length} accounts`}/></Card>
-              <Card><Chip label="Income" value={disp(totalIncome)} color={C.teal} sub="This month"/></Card>
-              <Card><Chip label="Expenses" value={disp(totalExpense)} color={totalExpense>totalIncome*0.8?C.coral:C.textPrimary} sub={`${totalIncome>0?((totalExpense/totalIncome)*100).toFixed(0):0}% of income`}/></Card>
-              <Card><Chip label="Total Debt" value={disp(totalDebt)} color={C.coral} sub={`${loans.length} loan${loans.length!==1?"s":""}`}/></Card>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10}}>
+              <Card onClick={() => setTab("accounts")}><Chip label="Total Balance" value={disp(totalBalance)} color={C.textPrimary} sub={`${wallets.length} accounts`}/></Card>
+              <Card onClick={() => setTab("transactions")}><Chip label="Income" value={disp(totalIncome)} color={C.teal} sub="This month"/></Card>
+              <Card onClick={() => setTab("transactions")}><Chip label="Expenses" value={disp(totalExpense)} color={totalExpense>totalIncome*0.8?C.coral:C.textPrimary} sub={`${totalIncome>0?((totalExpense/totalIncome)*100).toFixed(0):0}% of income`}/></Card>
+              <Card onClick={() => setTab("investments")}><Chip label="Investments" value={disp(portfolioValue)} color={C.teal} sub={`${investments.length} asset${investments.length!==1?"s":""}`}/></Card>
+              <Card onClick={() => setTab("loans")}><Chip label="Total Debt" value={disp(totalDebt)} color={C.coral} sub={`${loans.length} loan${loans.length!==1?"s":""}`}/></Card>
             </div>
 
             {watched.length>0&&(
-              <Card style={{borderLeft:`3px solid ${C.gold}`}}>
+              <Card onClick={() => setTab("budgets")} style={{borderLeft:`3px solid ${C.gold}`}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                   <div style={{fontWeight:700,fontSize:13}}>👁 Watching Closely</div>
-                  <button onClick={()=>setTab("budgets")} style={{background:"none",border:"none",color:C.teal,cursor:"pointer",fontSize:11}}>Manage →</button>
+                  <button onClick={(e)=>{e.stopPropagation();setTab("budgets");}} style={{background:"none",border:"none",color:C.teal,cursor:"pointer",fontSize:11}}>Manage →</button>
                 </div>
                 {watched.map(c=>{
                   const spent=spendByCat[c.id]||0,over=c.budget>0&&spent>c.budget;
@@ -955,7 +986,7 @@ export default function App() {
             )}
 
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-              <Card>
+              <Card onClick={() => setTab("budgets")}>
                 <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>Spending by Category</div>
                 {expCats.filter(c=>spendByCat[c.id]>0).sort((a,b)=>(spendByCat[b.id]||0)-(spendByCat[a.id]||0)).slice(0,6).map(c=>(
                   <div key={c.id} style={{marginBottom:9}}>
@@ -967,7 +998,7 @@ export default function App() {
                   </div>
                 ))}
               </Card>
-              <Card>
+              <Card onClick={() => setTab("transactions")}>
                 <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>Monthly Expenses</div>
                 <MiniBar height={100} data={[{label:"Jan",value:62000},{label:"Feb",value:71000},{label:"Mar",value:58000},{label:"Apr",value:80000},{label:"May",value:74000},{label:"Jun",value:totalExpense,highlight:true}]}/>
                 <div style={{display:"flex",gap:10,marginTop:10}}>
@@ -978,10 +1009,10 @@ export default function App() {
             </div>
 
             {goals.length>0&&(
-              <Card>
+              <Card onClick={() => setTab("goals")}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                   <div style={{fontWeight:700,fontSize:13}}>Savings Goals</div>
-                  <button onClick={()=>setTab("goals")} style={{background:"none",border:"none",color:C.teal,cursor:"pointer",fontSize:11}}>View all →</button>
+                  <button onClick={(e)=>{e.stopPropagation();setTab("goals");}} style={{background:"none",border:"none",color:C.teal,cursor:"pointer",fontSize:11}}>View all →</button>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
                   {goals.map(g=>{const pct=Math.min((g.saved/g.target)*100,100);return(
@@ -997,10 +1028,10 @@ export default function App() {
               </Card>
             )}
 
-            <Card>
+            <Card onClick={() => setTab("transactions")}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                 <div style={{fontWeight:700,fontSize:13}}>Recent Transactions</div>
-                <button onClick={()=>setTab("transactions")} style={{background:"none",border:"none",color:C.teal,cursor:"pointer",fontSize:11}}>View all →</button>
+                <button onClick={(e)=>{e.stopPropagation();setTab("transactions");}} style={{background:"none",border:"none",color:C.teal,cursor:"pointer",fontSize:11}}>View all →</button>
               </div>
               {txs.slice(0,8).map((t,i)=>{
                 const isT=t.type==="transfer_out"||t.type==="transfer_in";

@@ -10,22 +10,22 @@
  * Auth:  JWT (stored in localStorage, auto-refreshed by api.js interceptor)
  */
 
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, createContext, useContext } from "react";
 import AuthPage from "./pages/AuthPage.jsx";
 import { useAuth } from "./hooks/useAuth.js";
 import {
   walletsApi, txApi, catsApi, goalsApi, invsApi,
   loansApi, recurApi, fxApi, aiApi, billingApi, reconcileApi,
 } from "./lib/api.js";
+import { tokens, getTheme, setTheme as persistTheme } from "./theme.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DESIGN TOKENS
+// DESIGN TOKENS  — resolved dynamically from theme; see App() for C usage
 // ─────────────────────────────────────────────────────────────────────────────
-const C = {
-  navy:"#0B1120", navyMid:"#15202E", navyLight:"#1E2E42",
+// Static accent colours shared by both themes (used outside component scope)
+const ACCENT = {
   teal:"#00D4AA", gold:"#F5C842", coral:"#FF6B6B",
   blue:"#4A90E2", purple:"#9B59B6", green:"#2ECC71", orange:"#E67E22",
-  textPrimary:"#F0F4FF", textMuted:"#8B9ABB", textFaint:"#3D5068",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -82,56 +82,75 @@ const downloadBlob = (blob, name) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // PRIMITIVE COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
-const Badge = ({ children, color=C.teal }) => (
-  <span style={{ background:color+"22", color, border:`1px solid ${color}44`, borderRadius:20, padding:"2px 10px", fontSize:11, fontWeight:600, letterSpacing:"0.04em", whiteSpace:"nowrap" }}>
-    {children}
-  </span>
-);
+// ─────────────────────────────────────────────────────────────────────────────
+// THEME CONTEXT — lets primitive components read current C without prop drilling
+// ─────────────────────────────────────────────────────────────────────────────
+const ThemeCtx = createContext(null);
+const useC = () => useContext(ThemeCtx);
 
-const Card = ({ children, style={}, onClick, className="" }) => (
-  <div 
-    onClick={onClick} 
-    className={`${onClick ? "interactive-card" : ""} ${className}`}
-    style={{ 
-      background:C.navyMid, 
-      borderRadius:16, 
-      padding:20, 
-      border:`1px solid ${C.navyLight}`, 
-      cursor:onClick?"pointer":"default", 
-      transition:onClick ? "all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)" : "border-color 0.2s",
-      ...style 
-    }}
-  >
-    {children}
-  </div>
-);
+const Badge = ({ children, color }) => {
+  const C = useC();
+  const col = color || C.teal;
+  return (
+    <span style={{ background:col+"22", color:col, border:`1px solid ${col}44`, borderRadius:20, padding:"2px 10px", fontSize:11, fontWeight:600, letterSpacing:"0.04em", whiteSpace:"nowrap" }}>
+      {children}
+    </span>
+  );
+};
 
-const Chip = ({ label, value, color=C.teal, sub }) => (
-  <div style={{ background:C.navyLight, borderRadius:12, padding:"10px 14px" }}>
-    <div style={{ color:C.textMuted, fontSize:10, marginBottom:4, textTransform:"uppercase", letterSpacing:"0.06em" }}>{label}</div>
-    <div style={{ color, fontSize:16, fontWeight:700, lineHeight:1.2 }}>{value}</div>
-    {sub && <div style={{ color:C.textFaint, fontSize:10, marginTop:3 }}>{sub}</div>}
-  </div>
-);
+const Card = ({ children, style={}, onClick, className="" }) => {
+  const C = useC();
+  return (
+    <div
+      onClick={onClick}
+      className={`${onClick ? "interactive-card" : ""} ${className}`}
+      style={{
+        background:C.navyMid,
+        borderRadius:16,
+        padding:20,
+        border:`1px solid ${C.navyLight}`,
+        cursor:onClick?"pointer":"default",
+        transition:"all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)",
+        ...style
+      }}
+    >
+      {children}
+    </div>
+  );
+};
 
-const Bar = ({ value, max, color=C.teal }) => {
+const Chip = ({ label, value, color, sub }) => {
+  const C = useC();
+  return (
+    <div style={{ background:C.navyLight, borderRadius:12, padding:"10px 14px" }}>
+      <div style={{ color:C.textMuted, fontSize:10, marginBottom:4, textTransform:"uppercase", letterSpacing:"0.06em" }}>{label}</div>
+      <div style={{ color:color||C.teal, fontSize:16, fontWeight:700, lineHeight:1.2 }}>{value}</div>
+      {sub && <div style={{ color:C.textFaint, fontSize:10, marginTop:3 }}>{sub}</div>}
+    </div>
+  );
+};
+
+const Bar = ({ value, max, color }) => {
+  const C = useC();
   const pct = Math.min((value/Math.max(max,1))*100, 100);
-  const col = value>max?C.coral:pct>80?C.gold:color;
+  const col = value>max?C.coral:pct>80?C.gold:(color||C.teal);
   return <div style={{ background:C.navyLight, borderRadius:8, height:6, overflow:"hidden" }}>
     <div style={{ width:`${pct}%`, height:"100%", background:col, borderRadius:8, transition:"width 0.6s ease" }}/>
   </div>;
 };
 
-const Sparkline = ({ values, color=C.teal, width=100, height=40 }) => {
+const Sparkline = ({ values, color, width=100, height=40 }) => {
+  const C = useC();
   if (!values||values.length<2) return null;
   const min=Math.min(...values), max=Math.max(...values), range=max-min||1;
   const pts = values.map((v,i)=>`${(i/(values.length-1))*width},${height-((v-min)/range)*height}`).join(" ");
   return <svg width={width} height={height} style={{ overflow:"visible", flexShrink:0 }}>
-    <polyline points={pts} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"/>
+    <polyline points={pts} fill="none" stroke={color||C.teal} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"/>
   </svg>;
 };
 
 const MiniBar = ({ data, height=90 }) => {
+  const C = useC();
   const max = Math.max(...data.map(d=>d.value),1);
   return <div style={{ display:"flex", alignItems:"flex-end", gap:6, height }}>
     {data.map((d,i)=>(
@@ -144,6 +163,7 @@ const MiniBar = ({ data, height=90 }) => {
 };
 
 const HealthRing = ({ score }) => {
+  const C = useC();
   const r=52,cx=64,cy=64,circ=2*Math.PI*r;
   const color = score>=75?C.teal:score>=50?C.gold:C.coral;
   return <div style={{ position:"relative", width:128, height:128, flexShrink:0 }}>
@@ -161,9 +181,10 @@ const HealthRing = ({ score }) => {
 };
 
 const Modal = ({ open, onClose, title, children, wide=false }) => {
+  const C = useC();
   if (!open) return null;
-  return <div style={{ position:"fixed", inset:0, background:"#000D", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }} onClick={onClose}>
-    <div className="modal-container" style={{ background:C.navyMid, borderRadius:20, padding:28, width:"100%", maxWidth:wide?740:480, border:`1px solid ${C.navyLight}`, maxHeight:"94vh", overflowY:"auto" }} onClick={e=>e.stopPropagation()}>
+  return <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }} onClick={onClose}>
+    <div className="modal-container" style={{ background:C.navyMid, borderRadius:20, padding:28, width:"100%", maxWidth:wide?740:480, border:`1px solid ${C.navyLight}`, maxHeight:"94vh", overflowY:"auto", boxShadow:`0 20px 60px ${C.shadow}` }} onClick={e=>e.stopPropagation()}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:22 }}>
         <div style={{ color:C.textPrimary, fontSize:17, fontWeight:700 }}>{title}</div>
         <button onClick={onClose} style={{ background:C.navyLight, border:"none", color:C.textMuted, borderRadius:8, width:32, height:32, cursor:"pointer", fontSize:15 }}>✕</button>
@@ -174,36 +195,45 @@ const Modal = ({ open, onClose, title, children, wide=false }) => {
 };
 
 const Field = ({ label, type="text", value, onChange, placeholder, options, note }) => {
-  const base = { background:C.navyLight, border:`1px solid ${C.navyLight}`, borderRadius:10, padding:"10px 14px", color:C.textPrimary, width:"100%", fontSize:13, outline:"none", boxSizing:"border-box" };
+  const C = useC();
+  const base = { background:C.navyLight, border:`1px solid ${C.inputBorder||C.navyLight}`, borderRadius:10, padding:"10px 14px", color:C.textPrimary, width:"100%", fontSize:13, outline:"none", boxSizing:"border-box" };
   return <div style={{ marginBottom:12 }}>
     {label&&<div style={{ color:C.textMuted, fontSize:11, marginBottom:5, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em" }}>{label}</div>}
     {options
       ? <select value={value} onChange={e=>onChange(e.target.value)} style={{...base,cursor:"pointer"}}>{options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select>
       : <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={base}
-          onFocus={e=>e.target.style.borderColor=C.teal} onBlur={e=>e.target.style.borderColor=C.navyLight}/>}
+          onFocus={e=>e.target.style.borderColor=C.teal} onBlur={e=>e.target.style.borderColor=C.inputBorder||C.navyLight}/>}
     {note&&<div style={{ color:C.textFaint, fontSize:11, marginTop:4 }}>{note}</div>}
   </div>;
 };
 
-const Btn = ({ children, onClick, color=C.teal, outline=false, style={}, disabled=false, small=false, className="" }) => (
-  <button onClick={onClick} disabled={disabled}
-    className={`app-btn ${small ? "app-btn-small" : ""} ${className}`}
-    style={{ background:outline?"transparent":color, color:outline?color:C.navy, border:`1.5px solid ${color}`, borderRadius:10, padding:small?"6px 12px":"9px 16px", cursor:disabled?"not-allowed":"pointer", fontWeight:700, fontSize:small?11:13, transition:"opacity 0.15s", opacity:disabled?0.45:1, ...style }}
-    onMouseEnter={e=>{ if(!disabled) e.currentTarget.style.opacity="0.82"; }}
-    onMouseLeave={e=>{ e.currentTarget.style.opacity=disabled?"0.45":"1"; }}>
-    {children}
-  </button>
-);
+const Btn = ({ children, onClick, color, outline=false, style={}, disabled=false, small=false, className="" }) => {
+  const C = useC();
+  const col = color || C.teal;
+  return (
+    <button onClick={onClick} disabled={disabled}
+      className={`app-btn ${small ? "app-btn-small" : ""} ${className}`}
+      style={{ background:outline?"transparent":col, color:outline?col:C.navy, border:`1.5px solid ${col}`, borderRadius:10, padding:small?"6px 12px":"9px 16px", cursor:disabled?"not-allowed":"pointer", fontWeight:700, fontSize:small?11:13, transition:"opacity 0.15s", opacity:disabled?0.45:1, ...style }}
+      onMouseEnter={e=>{ if(!disabled) e.currentTarget.style.opacity="0.82"; }}
+      onMouseLeave={e=>{ e.currentTarget.style.opacity=disabled?"0.45":"1"; }}>
+      {children}
+    </button>
+  );
+};
 
-const Divider = ({ label }) => (
-  <div style={{ display:"flex", alignItems:"center", gap:10, margin:"6px 0 14px" }}>
-    <div style={{ flex:1, height:1, background:C.navyLight }}/>
-    <span style={{ color:C.textFaint, fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.06em" }}>{label}</span>
-    <div style={{ flex:1, height:1, background:C.navyLight }}/>
-  </div>
-);
+const Divider = ({ label }) => {
+  const C = useC();
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:10, margin:"6px 0 14px" }}>
+      <div style={{ flex:1, height:1, background:C.navyLight }}/>
+      <span style={{ color:C.textFaint, fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.06em" }}>{label}</span>
+      <div style={{ flex:1, height:1, background:C.navyLight }}/>
+    </div>
+  );
+};
 
 const FileUpload = ({ label, accept, onFile, files=[] }) => {
+  const C = useC();
   const ref = useRef();
   return <div style={{ marginBottom:14 }}>
     {label&&<div style={{ color:C.textMuted, fontSize:11, marginBottom:5, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em" }}>{label}</div>}
@@ -226,7 +256,8 @@ const FileUpload = ({ label, accept, onFile, files=[] }) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // GOAL CARD  — own component so useState doesn't break inside .map()
 // ─────────────────────────────────────────────────────────────────────────────
-function GoalCard({ g, wallets, disp, onFund, onEdit, C, Bar }) {
+function GoalCard({ g, wallets, disp, onFund, onEdit }) {
+  const C = useC();
   const [amt, setAmt] = useState("");
   const [busy, setBusy] = useState(false);
   const pct    = Math.min((g.saved_kes/g.target_kes)*100, 100);
@@ -283,13 +314,16 @@ function GoalCard({ g, wallets, disp, onFund, onEdit, C, Bar }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // LOADING SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
-const LoadingScreen = ({ message="Loading…" }) => (
-  <div style={{ minHeight:"100vh", background:C.navy, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", fontFamily:"'Inter',sans-serif" }}>
-    <div style={{ fontSize:36, marginBottom:16, color:C.teal, animation:"spin 1.2s linear infinite" }}>◈</div>
-    <div style={{ color:C.textMuted, fontSize:14 }}>{message}</div>
-    <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
-  </div>
-);
+const LoadingScreen = ({ message="Loading…" }) => {
+  const C = useC();
+  return (
+    <div style={{ minHeight:"100vh", background:C.navy, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", fontFamily:"'Inter',sans-serif" }}>
+      <div style={{ fontSize:36, marginBottom:16, color:C.teal, animation:"spin 1.2s linear infinite" }}>◈</div>
+      <div style={{ color:C.textMuted, fontSize:14 }}>{message}</div>
+      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN APP
@@ -297,6 +331,16 @@ const LoadingScreen = ({ message="Loading…" }) => (
 export default function App() {
   const { user, plan, loading: authLoading, login, register, logout, updateUser } = useAuth();
   const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
+
+  // ── Theme
+  const [theme, setThemeState] = useState(getTheme);
+  const C = tokens(theme);
+  const toggleTheme = useCallback(() => {
+    const next = theme === "dark" ? "light" : "dark";
+    persistTheme(next);
+    setThemeState(next);
+    window.dispatchEvent(new Event("py:theme")); // notify AuthPage if open
+  }, [theme]);
 
   // ── Data state (all loaded from API)
   const [wallets,     setWallets]     = useState([]);
@@ -1133,10 +1177,11 @@ export default function App() {
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER GATES
   // ─────────────────────────────────────────────────────────────────────────
-  if (authLoading) return <LoadingScreen message="Starting Pesa Yangu…"/>;
+  if (authLoading) return <ThemeCtx.Provider value={C}><LoadingScreen message="Starting Pesa Yangu…"/></ThemeCtx.Provider>;
   if (!user)       return <AuthPage onLogin={login} onRegister={register}/>;
-  if (dataLoading) return <LoadingScreen message="Loading your data…"/>;
+  if (dataLoading) return <ThemeCtx.Provider value={C}><LoadingScreen message="Loading your data…"/></ThemeCtx.Provider>;
   if (dataError)   return (
+    <ThemeCtx.Provider value={C}>
     <div style={{minHeight:"100vh",background:C.navy,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Inter',sans-serif"}}>
       <div style={{textAlign:"center",color:C.coral}}>
         <div style={{fontSize:36,marginBottom:12}}>⚠</div>
@@ -1144,6 +1189,7 @@ export default function App() {
         <Btn onClick={()=>window.location.reload()}>Retry</Btn>
       </div>
     </div>
+    </ThemeCtx.Provider>
   );
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1167,12 +1213,15 @@ export default function App() {
   // FULL RENDER
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div style={{minHeight:"100vh",background:C.navy,color:C.textPrimary,fontFamily:"'Inter',-apple-system,sans-serif",display:"flex",flexDirection:"column",overflowX:"hidden"}}>
+    <ThemeCtx.Provider value={C}>
+    <div style={{minHeight:"100vh",background:C.navy,color:C.textPrimary,fontFamily:"'Inter',-apple-system,sans-serif",display:"flex",flexDirection:"column",overflowX:"hidden",transition:"background 0.3s,color 0.3s"}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Serif+Display&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
+        *, *::before, *::after { transition: background-color 0.25s, border-color 0.25s, color 0.25s; }
         ::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${C.navyLight};border-radius:4px}
-        select option{background:${C.navyMid}}
+        select option{background:${C.navyMid};color:${C.textPrimary}}
+        input::placeholder{color:${C.textFaint}}
         @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
         @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
         @keyframes slideIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
@@ -1180,22 +1229,24 @@ export default function App() {
         body, html {
           overflow-x: hidden;
           max-width: 100vw;
+          background: ${C.navy};
         }
 
         .interactive-card {
           position: relative;
+          transition: transform 0.25s cubic-bezier(0.2,0.8,0.2,1), box-shadow 0.25s, border-color 0.25s, background 0.25s !important;
         }
         .interactive-card:hover {
           transform: translateY(-4px) scale(1.01);
           border-color: ${C.teal}88 !important;
-          box-shadow: 0 12px 30px rgba(0, 212, 170, 0.12), 0 4px 12px rgba(0, 0, 0, 0.2);
-          background: #1a2839 !important;
+          box-shadow: 0 12px 30px ${C.shadow}, 0 4px 12px ${C.shadow};
+          background: ${C.navyLight} !important;
         }
         .interactive-card:active {
           transform: translateY(-1px) scale(0.985);
-          box-shadow: 0 4px 10px rgba(0, 212, 170, 0.06), 0 2px 4px rgba(0, 0, 0, 0.2);
+          box-shadow: 0 4px 10px ${C.shadow};
           border-color: ${C.teal}bb !important;
-          background: #162232 !important;
+          background: ${C.navyLight} !important;
         }
 
         /* Grid and Layout Responsiveness */
@@ -1298,6 +1349,7 @@ export default function App() {
           <Btn onClick={()=>openM("importExport")} outline color={C.textMuted} small className="desktop-only-btn">⬆⬇ Data</Btn>
           <Btn onClick={getAI} outline color={C.gold} small className="desktop-only-btn">✦ AI</Btn>
           <Btn onClick={()=>{setEditTx(null);setFTx({...blankTx,wallet:wallets[0]?.id||"",category:expCats[0]?.id||""});openM("tx");}} small>+ Add</Btn>
+          <button onClick={toggleTheme} title={theme==="dark"?"Switch to light mode":"Switch to dark mode"} style={{background:C.navyLight,border:`1px solid ${C.navyLight}`,borderRadius:8,color:C.textMuted,padding:"6px 10px",cursor:"pointer",fontSize:15,lineHeight:1,transition:"background 0.2s,color 0.2s"}} onMouseEnter={e=>{e.currentTarget.style.color=C.teal;}} onMouseLeave={e=>{e.currentTarget.style.color=C.textMuted;}}>{theme==="dark"?"☀️":"🌙"}</button>
           <button onClick={logout} className="desktop-only-btn" style={{background:"none",border:`1px solid ${C.navyLight}`,borderRadius:8,color:C.textMuted,padding:"6px 10px",cursor:"pointer",fontSize:11}}>Sign out</button>
         </div>
       </div>
@@ -1630,7 +1682,7 @@ export default function App() {
               <Btn onClick={()=>{setFGoal({...blankGoal,wallet:wallets[0]?.id||""});openM("goal");}}>+ New Goal</Btn>
             </div>
             <div className="grid-2" style={{ gap: 14 }}>
-              {goals.map(g=><GoalCard key={g.id} g={g} wallets={wallets} disp={disp} onFund={fundGoal} onEdit={openEditGoal} C={C} Bar={Bar}/>)}
+              {goals.map(g=><GoalCard key={g.id} g={g} wallets={wallets} disp={disp} onFund={fundGoal} onEdit={openEditGoal}/>)}
               {goals.length===0&&<div style={{gridColumn:"1/-1",textAlign:"center",color:C.textFaint,padding:"40px 0",fontSize:13}}>No goals yet. Create one to start saving with purpose.</div>}
             </div>
           </div>
@@ -1865,6 +1917,7 @@ export default function App() {
               </div>
               <div className="grid-2">
                 <Btn onClick={()=>openM("importExport")} outline color={C.textMuted} style={{padding:12}}>⬆⬇ Import/Export</Btn>
+                <button onClick={toggleTheme} style={{background:C.navyLight,border:`1px solid ${C.navyLight}`,borderRadius:10,color:C.textPrimary,padding:12,cursor:"pointer",fontSize:13,fontWeight:700}}>{theme==="dark"?"☀️ Light Mode":"🌙 Dark Mode"}</button>
                 <button onClick={logout} style={{background:"none",border:`1px solid ${C.coral}`,borderRadius:10,color:C.coral,padding:12,cursor:"pointer",fontSize:13,fontWeight:700}}>Sign out</button>
               </div>
             </div>
@@ -2190,5 +2243,6 @@ export default function App() {
         })}
       </div>
     </div>
+    </ThemeCtx.Provider>
   );
 }

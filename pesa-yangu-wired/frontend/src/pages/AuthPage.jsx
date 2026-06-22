@@ -1,44 +1,31 @@
 /**
  * frontend/src/pages/AuthPage.jsx
- * Login / Register screen shown when the user is not authenticated.
+ * Login / Register screen — theme-aware (dark / light)
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { tokens, getTheme } from "../theme.js";
 
-const C = {
-  navy:"#0B1120", navyMid:"#15202E", navyLight:"#1E2E42",
-  teal:"#00D4AA", gold:"#F5C842", coral:"#FF6B6B", blue:"#4A90E2",
-  textPrimary:"#F0F4FF", textMuted:"#8B9ABB", textFaint:"#3D5068",
-};
-
-const inp = {
-  background: C.navyLight, border:`1px solid ${C.navyLight}`,
-  borderRadius:10, padding:"12px 16px", color:C.textPrimary,
-  width:"100%", fontSize:14, outline:"none", boxSizing:"border-box",
-  marginBottom:12,
-};
-
-// Eye icons as inline SVG — no external dependency needed
+// Eye icons as inline SVG
 const EyeOpen = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
     <circle cx="12" cy="12" r="3"/>
   </svg>
 );
-
 const EyeClosed = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/>
     <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/>
     <line x1="1" y1="1" x2="23" y2="23"/>
   </svg>
 );
 
-// Reusable password field with show/hide toggle
-function PasswordField({ value, onChange, placeholder, style = {} }) {
+function PasswordField({ value, onChange, placeholder, C }) {
   const [show, setShow] = useState(false);
-
   return (
-    <div style={{ position: "relative", marginBottom: style.marginBottom ?? 12 }}>
+    <div style={{ position:"relative", marginBottom:12 }}>
       <input
         type={show ? "text" : "password"}
         value={value}
@@ -46,14 +33,13 @@ function PasswordField({ value, onChange, placeholder, style = {} }) {
         placeholder={placeholder}
         required
         style={{
-          ...inp,
-          marginBottom: 0,
-          paddingRight: 44,   // room for the toggle button
-          ...style,
-          marginBottom: 0,    // always reset — parent div owns the margin
+          background:C.navyLight, border:`1px solid ${C.inputBorder}`,
+          borderRadius:10, padding:"12px 44px 12px 16px",
+          color:C.textPrimary, width:"100%", fontSize:14,
+          outline:"none", boxSizing:"border-box",
         }}
         onFocus={e => e.target.style.borderColor = C.teal}
-        onBlur={e  => e.target.style.borderColor = C.navyLight}
+        onBlur={e  => e.target.style.borderColor = C.inputBorder}
       />
       <button
         type="button"
@@ -61,27 +47,15 @@ function PasswordField({ value, onChange, placeholder, style = {} }) {
         aria-label={show ? "Hide password" : "Show password"}
         aria-pressed={show}
         style={{
-          position: "absolute",
-          right: 12,
-          top: "50%",
-          transform: "translateY(-50%)",
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          color: C.textMuted,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 4,
-          borderRadius: 6,
-          transition: "color 0.15s",
-          // Visible focus ring for keyboard users
-          outline: "none",
+          position:"absolute", right:12, top:"50%", transform:"translateY(-50%)",
+          background:"none", border:"none", cursor:"pointer",
+          color:C.textMuted, display:"flex", alignItems:"center",
+          padding:4, borderRadius:6, outline:"none", transition:"color 0.15s",
         }}
         onMouseEnter={e => e.currentTarget.style.color = C.teal}
         onMouseLeave={e => e.currentTarget.style.color = C.textMuted}
-        onFocus={e    => { e.currentTarget.style.color = C.teal; e.currentTarget.style.boxShadow = `0 0 0 2px ${C.teal}44`; }}
-        onBlur={e     => { e.currentTarget.style.color = C.textMuted; e.currentTarget.style.boxShadow = "none"; }}
+        onFocus={e  => { e.currentTarget.style.color=C.teal; e.currentTarget.style.boxShadow=`0 0 0 2px ${C.teal}44`; }}
+        onBlur={e   => { e.currentTarget.style.color=C.textMuted; e.currentTarget.style.boxShadow="none"; }}
       >
         {show ? <EyeClosed /> : <EyeOpen />}
       </button>
@@ -90,12 +64,29 @@ function PasswordField({ value, onChange, placeholder, style = {} }) {
 }
 
 export default function AuthPage({ onLogin, onRegister }) {
-  const [mode,     setMode]     = useState("login"); // "login" | "register"
+  const [theme, setThemeState] = useState(getTheme);
+  const C = tokens(theme);
+
+  // Keep in sync if theme changes elsewhere (e.g. user was on auth page)
+  useEffect(() => {
+    const handler = () => setThemeState(getTheme());
+    window.addEventListener("py:theme", handler);
+    return () => window.removeEventListener("py:theme", handler);
+  }, []);
+
+  const [mode,     setMode]     = useState("login");
   const [name,     setName]     = useState("");
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
   const [error,    setError]    = useState("");
   const [loading,  setLoading]  = useState(false);
+
+  const inp = {
+    background:C.navyLight, border:`1px solid ${C.inputBorder}`,
+    borderRadius:10, padding:"12px 16px", color:C.textPrimary,
+    width:"100%", fontSize:14, outline:"none", boxSizing:"border-box",
+    marginBottom:12,
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -116,28 +107,39 @@ export default function AuthPage({ onLogin, onRegister }) {
   };
 
   return (
-    <div style={{ minHeight:"100vh", background:C.navy, display:"flex", alignItems:"center", justifyContent:"center", padding:20, fontFamily:"'Inter',-apple-system,sans-serif" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Serif+Display&display=swap');*{box-sizing:border-box;margin:0;padding:0;}`}</style>
+    <div style={{ minHeight:"100vh", background:C.navy, display:"flex", alignItems:"center",
+      justifyContent:"center", padding:20, fontFamily:"'Inter',-apple-system,sans-serif",
+      transition:"background 0.3s" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Serif+Display&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0;}
+        input::placeholder { color: ${C.textFaint}; }
+        select option { background: ${C.navyMid}; color: ${C.textPrimary}; }
+      `}</style>
 
       <div style={{ width:"100%", maxWidth:400 }}>
-
         {/* Logo */}
         <div style={{ textAlign:"center", marginBottom:36 }}>
-          <div style={{ width:56, height:56, background:`linear-gradient(135deg,${C.teal},${C.blue})`, borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", fontSize:26, margin:"0 auto 14px" }}>◈</div>
+          <div style={{ width:56, height:56, background:`linear-gradient(135deg,${C.teal},${C.blue})`,
+            borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center",
+            fontSize:26, margin:"0 auto 14px" }}>◈</div>
           <div style={{ fontWeight:800, fontSize:22, letterSpacing:"-0.02em", color:C.textPrimary }}>Pesa Yangu</div>
           <div style={{ color:C.textMuted, fontSize:13, marginTop:4 }}>Smart personal finance for Kenya</div>
         </div>
 
         {/* Card */}
-        <div style={{ background:C.navyMid, borderRadius:20, padding:28, border:`1px solid ${C.navyLight}` }}>
+        <div style={{ background:C.navyMid, borderRadius:20, padding:28,
+          border:`1px solid ${C.navyLight}`, boxShadow:`0 4px 24px ${C.shadow}`,
+          transition:"background 0.3s, border-color 0.3s" }}>
 
           {/* Tab toggle */}
           <div style={{ display:"flex", background:C.navyLight, borderRadius:12, padding:4, marginBottom:24 }}>
             {["login","register"].map(m => (
               <button key={m} onClick={() => { setMode(m); setError(""); setPassword(""); }}
-                style={{ flex:1, padding:"9px 0", borderRadius:9, border:"none", cursor:"pointer", fontWeight:700, fontSize:13,
+                style={{ flex:1, padding:"9px 0", borderRadius:9, border:"none", cursor:"pointer",
+                  fontWeight:700, fontSize:13,
                   background: mode===m ? C.teal : "transparent",
-                  color:      mode===m ? C.navy  : C.textMuted,
+                  color:      mode===m ? "#0B1120" : C.textMuted,
                   transition:"all 0.2s" }}>
                 {m === "login" ? "Sign In" : "Create Account"}
               </button>
@@ -149,28 +151,32 @@ export default function AuthPage({ onLogin, onRegister }) {
               <input value={name} onChange={e=>setName(e.target.value)}
                 placeholder="Full name" style={inp}
                 onFocus={e=>e.target.style.borderColor=C.teal}
-                onBlur={e=>e.target.style.borderColor=C.navyLight}/>
+                onBlur={e=>e.target.style.borderColor=C.inputBorder}/>
             )}
             <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
               placeholder="Email address" style={inp} required
               onFocus={e=>e.target.style.borderColor=C.teal}
-              onBlur={e=>e.target.style.borderColor=C.navyLight}/>
+              onBlur={e=>e.target.style.borderColor=C.inputBorder}/>
 
             <PasswordField
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder={mode === "register" ? "Password (min 8 characters)" : "Password"}
-              style={{ marginBottom: error ? 8 : 20 }}
+              C={C}
             />
 
             {error && (
-              <div style={{ color:C.coral, fontSize:12, marginBottom:14, padding:"8px 12px", background:C.coral+"14", borderRadius:8 }}>
+              <div style={{ color:C.coral, fontSize:12, marginBottom:14,
+                padding:"8px 12px", background:C.coral+"14", borderRadius:8 }}>
                 {error}
               </div>
             )}
 
             <button type="submit" disabled={loading}
-              style={{ width:"100%", padding:14, background:C.teal, color:C.navy, border:"none", borderRadius:12, fontWeight:800, fontSize:15, cursor:loading?"not-allowed":"pointer", opacity:loading?0.7:1, transition:"opacity 0.2s" }}>
+              style={{ width:"100%", padding:14, background:C.teal, color:"#0B1120",
+                border:"none", borderRadius:12, fontWeight:800, fontSize:15,
+                cursor:loading?"not-allowed":"pointer", opacity:loading?0.7:1,
+                transition:"opacity 0.2s" }}>
               {loading ? "Please wait…" : mode === "login" ? "Sign In" : "Create Account"}
             </button>
           </form>

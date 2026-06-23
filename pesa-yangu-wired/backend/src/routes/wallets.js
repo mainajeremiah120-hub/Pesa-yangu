@@ -53,14 +53,27 @@ router.delete("/:id", async (req, res, next) => {
       [req.params.id, req.user.id]
     );
     if (!check.length) return res.status(404).json({ error: "Wallet not found" });
-    // Delete all child rows that have NOT NULL wallet_id (FK ON DELETE RESTRICT),
-    // in dependency order so no FK violation fires.
-    await query("DELETE FROM loan_repayments WHERE wallet_id=$1", [req.params.id]);
-    await query("DELETE FROM investment_returns WHERE wallet_id=$1", [req.params.id]);
-    await query("DELETE FROM transactions WHERE wallet_id=$1", [req.params.id]);
-    await query("DELETE FROM recurring_transactions WHERE wallet_id=$1", [req.params.id]);
-    await query("DELETE FROM goals WHERE wallet_id=$1", [req.params.id]);
-    await query("DELETE FROM investments WHERE wallet_id=$1", [req.params.id]);
+
+    // Check for linked records before allowing delete
+    const { rows: counts } = await query(
+      `SELECT
+        (SELECT COUNT(*) FROM transactions        WHERE wallet_id=$1)::int AS transactions,
+        (SELECT COUNT(*) FROM recurring_transactions WHERE wallet_id=$1)::int AS recurring,
+        (SELECT COUNT(*) FROM goals               WHERE wallet_id=$1)::int AS goals,
+        (SELECT COUNT(*) FROM investments         WHERE wallet_id=$1)::int AS investments,
+        (SELECT COUNT(*) FROM loan_repayments     WHERE wallet_id=$1)::int AS loan_repayments,
+        (SELECT COUNT(*) FROM investment_returns  WHERE wallet_id=$1)::int AS investment_returns`,
+      [req.params.id]
+    );
+    const c = counts[0];
+    const total = c.transactions + c.recurring + c.goals + c.investments + c.loan_repayments + c.investment_returns;
+    if (total > 0) {
+      return res.status(409).json({
+        error: "Wallet has linked records and cannot be deleted.",
+        counts: c,
+      });
+    }
+
     await query("DELETE FROM wallets WHERE id=$1", [req.params.id]);
     res.json({ ok: true });
   } catch(e) { next(e); }

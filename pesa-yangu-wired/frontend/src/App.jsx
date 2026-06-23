@@ -603,7 +603,7 @@ export default function App() {
         wallet:       tx.wallet_id,
         category:     tx.category_id,
         amount:       parseFloat(tx.amount_kes),
-        date:         tx.tx_date,
+        date:         (tx.tx_date||'').slice(0,10),
         loanId:       tx.loan_id,
         principalPaid: tx.principal_paid ? parseFloat(tx.principal_paid) : undefined,
         interestPaid:  tx.interest_paid  ? parseFloat(tx.interest_paid)  : undefined,
@@ -812,7 +812,7 @@ export default function App() {
     };
     try {
       const { transaction: tx } = await txApi.create(payload);
-      setTxs(p=>[{ ...tx, wallet:tx.wallet_id, category:tx.category_id, amount:parseFloat(tx.amount_kes), date:tx.tx_date }, ...p]);
+      setTxs(p=>[{ ...tx, wallet:tx.wallet_id, category:tx.category_id, amount:parseFloat(tx.amount_kes), date:(tx.tx_date||'').slice(0,10) }, ...p]);
       setWallets(p=>p.map(w=>w.id===wid?{...w,balance:parseFloat(w.balance)+(fTx.type==="income"?amtKES:-amtKES)}:w));
       if(fTx.isRecurring) {
         const { recurring: r } = await recurApi.create({
@@ -839,6 +839,14 @@ export default function App() {
         if(w.id===fXfer.to)   return{...w,balance:parseFloat(w.balance)+amtKES};
         return w;
       }));
+      // Fetch the two transfer transaction records so they appear in Records tab immediately
+      const { transactions: fresh } = await txApi.list({ limit: 10 });
+      if (fresh?.length) {
+        const newTxs = fresh
+          .filter(tx => tx.transfer_pair_id && !txs.find(t=>t.id===tx.id))
+          .map(tx => ({ ...tx, wallet:tx.wallet_id, category:tx.category_id, amount:parseFloat(tx.amount_kes), date:(tx.tx_date||"").slice(0,10) }));
+        if (newTxs.length) setTxs(p=>[...newTxs, ...p]);
+      }
       setFXfer(blankXfer); closeM("xfer");
       showToast("Transfer complete");
     } catch(err) { showToast(err?.response?.data?.error||"Transfer failed", C.coral); }
@@ -1123,7 +1131,7 @@ export default function App() {
           note:        fTx.note || undefined,
           tx_date:     fTx.date || todayStr(),
         });
-        const norm = { ...tx, wallet:tx.wallet_id, category:tx.category_id, amount:parseFloat(tx.amount_kes), date:tx.tx_date };
+        const norm = { ...tx, wallet:tx.wallet_id, category:tx.category_id, amount:parseFloat(tx.amount_kes), date:(tx.tx_date||'').slice(0,10) };
         setTxs(p => p.map(t => t.id === editTx.id ? norm : t));
         // Recalculate wallet balances: reverse old, apply new
         const oldAmt   = editTx.amount || parseFloat(editTx.amount_kes || 0);
@@ -1282,7 +1290,7 @@ export default function App() {
     if (editRefund) {
       try {
         const { transaction: tx } = await txApi.update(editRefund.id, { wallet_id:fRefund.wallet, amount_kes:amtKES, note:fRefund.note||undefined, tx_date:fRefund.date, refund_of:fRefund.refundOf });
-        const norm = { ...tx, wallet:tx.wallet_id, category:tx.category_id, amount:parseFloat(tx.amount_kes), date:tx.tx_date };
+        const norm = { ...tx, wallet:tx.wallet_id, category:tx.category_id, amount:parseFloat(tx.amount_kes), date:(tx.tx_date||'').slice(0,10) };
         setTxs(p=>p.map(t=>t.id===editRefund.id?norm:t));
         const oldAmt=editRefund.amount||parseFloat(editRefund.amount_kes||0), oldWid=editRefund.wallet||editRefund.wallet_id;
         setWallets(p=>p.map(w=>{ let b=parseFloat(w.balance); if(w.id===oldWid) b-=oldAmt; if(w.id===fRefund.wallet) b+=amtKES; return (w.id===oldWid||w.id===fRefund.wallet)?{...w,balance:b}:w; }));
@@ -1292,7 +1300,7 @@ export default function App() {
     } else {
       try {
         const { transaction: tx } = await txApi.create({ wallet_id:fRefund.wallet, type:"refund", amount_kes:amtKES, note:fRefund.note||undefined, tx_date:fRefund.date, refund_of:fRefund.refundOf });
-        const norm = { ...tx, wallet:tx.wallet_id, category:tx.category_id, amount:parseFloat(tx.amount_kes), date:tx.tx_date };
+        const norm = { ...tx, wallet:tx.wallet_id, category:tx.category_id, amount:parseFloat(tx.amount_kes), date:(tx.tx_date||'').slice(0,10) };
         setTxs(p=>[norm,...p]);
         setWallets(p=>p.map(w=>w.id===fRefund.wallet?{...w,balance:parseFloat(w.balance)+amtKES}:w));
         setFRefund(blankRefund); closeM("refund");
@@ -1489,7 +1497,7 @@ export default function App() {
       const { imported } = await txApi.importCSV(file);
       // Reload transactions
       const { transactions: fresh } = await txApi.list({ limit:500 });
-      setTxs((fresh||[]).map(tx=>({ ...tx, wallet:tx.wallet_id, category:tx.category_id, amount:parseFloat(tx.amount_kes), date:tx.tx_date })));
+      setTxs((fresh||[]).map(tx=>({ ...tx, wallet:tx.wallet_id, category:tx.category_id, amount:parseFloat(tx.amount_kes), date:(tx.tx_date||'').slice(0,10) })));
       // Reload wallet balances
       const { wallets: freshW } = await walletsApi.list();
       setWallets(freshW || []);

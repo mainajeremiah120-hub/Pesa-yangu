@@ -69,11 +69,13 @@ const unwrap = (p) => p.then((r) => r.data);
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const authApi = {
-  register: (p) => unwrap(client.post("/auth/register", p)),
-  login:    (p) => unwrap(client.post("/auth/login",    p)),
-  me:       ()  => unwrap(client.get("/auth/me")),
-  deactivate: () => unwrap(client.delete("/auth/account")),
-  logout:   ()  => {
+  register:       (p)           => unwrap(client.post("/auth/register", p)),
+  login:          (p)           => unwrap(client.post("/auth/login",    p)),
+  me:             ()            => unwrap(client.get("/auth/me")),
+  deactivate:     ()            => unwrap(client.delete("/auth/account")),
+  forgotPassword: (email)       => unwrap(client.post("/auth/forgot-password", { email })),
+  resetPassword:  (token, password) => unwrap(client.post("/auth/reset-password", { token, password })),
+  logout: () => {
     const rt = localStorage.getItem("py_refresh_token");
     localStorage.removeItem("py_access_token");
     localStorage.removeItem("py_refresh_token");

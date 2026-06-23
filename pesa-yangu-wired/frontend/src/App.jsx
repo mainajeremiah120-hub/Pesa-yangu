@@ -2542,11 +2542,12 @@ export default function App() {
             </div>
             <div className="grid-2">
               {[
-                { id: "goals", label: "Savings Goals", icon: "🏆", desc: "Track savings targets" },
-                { id: "recurring", label: "Recurring", icon: "🔁", desc: "Bills & subscriptions" },
-                { id: "investments", label: "Investments", icon: "📈", desc: "Asset portfolio" },
-                { id: "loans", label: "Loans & Debt", icon: "🏦", desc: "Track borrowing" },
-                { id: "reconcile", label: "Reconcile", icon: "✅", desc: "Import bank statement" },
+                { id: "goals",      label: "Savings Goals", icon: "🏆", desc: "Track savings targets" },
+                { id: "recurring",  label: "Recurring",    icon: "🔁", desc: "Bills & subscriptions" },
+                { id: "investments",label: "Investments",  icon: "📈", desc: "Asset portfolio" },
+                { id: "loans",      label: "Loans & Debt", icon: "🏦", desc: "Track borrowing" },
+                { id: "reconcile",  label: "Reconcile",    icon: "✅", desc: "Import bank statement" },
+                { id: "settings",   label: "Settings",     icon: "⚙️", desc: "Profile & preferences" },
               ].map(item => (
                 <Card key={item.id} onClick={() => setTab(item.id)} style={{ display:"flex", flexDirection:"column", gap:6 }}>
                   <div style={{ fontSize: 28 }}>{item.icon}</div>
@@ -2989,13 +2990,13 @@ export default function App() {
         boxShadow: "0 -4px 16px rgba(0,0,0,0.3)"
       }}>
         {[
-          { id: "dashboard", label: "Home", icon: "◈" },
-          { id: "accounts", label: "Wallets", icon: "🏦" },
+          { id: "dashboard", label: "Home",     icon: "◈" },
+          { id: "accounts",  label: "Wallets",  icon: "🏦" },
           { id: "transactions", label: "Records", icon: "📋" },
-          { id: "budgets", label: "Budgets", icon: "🎯" },
-          { id: "more", label: "More", icon: "☰" }
+          { id: "more",      label: "More",     icon: "☰" },
+          { id: "settings",  label: "Settings", icon: "⚙️" },
         ].map(item => {
-          const isActive = tab === item.id || (item.id === "more" && ["goals", "recurring", "investments", "loans", "reconcile"].includes(tab));
+          const isActive = tab === item.id || (item.id === "more" && ["goals", "recurring", "investments", "loans", "reconcile", "budgets"].includes(tab));
           return (
             <button
               key={item.id}

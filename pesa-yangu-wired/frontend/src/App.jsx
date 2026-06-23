@@ -403,6 +403,28 @@ const FileUpload = ({ label, accept, onFile, files=[] }) => {
   </div>;
 };
 
+
+// ── Confirm Delete Dialog ────────────────────────────────────────────────────
+const ConfirmModal = ({ open, onClose, onConfirm, title, message, danger=true }) => {
+  const C = useC();
+  if (!open) return null;
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }} onClick={onClose}>
+      <div style={{ background:C.navyMid, borderRadius:16, padding:24, width:"100%", maxWidth:380, border:`1px solid ${danger?C.coral+"44":C.navyLight}`, boxShadow:`0 20px 60px ${C.shadow}` }} onClick={e=>e.stopPropagation()}>
+        <div style={{ fontSize:32, textAlign:"center", marginBottom:12 }}>{danger ? "⚠️" : "❓"}</div>
+        <div style={{ fontWeight:700, fontSize:16, textAlign:"center", marginBottom:8, color:C.textPrimary }}>{title}</div>
+        <div style={{ color:C.textMuted, fontSize:13, textAlign:"center", marginBottom:20, lineHeight:1.6 }}>{message}</div>
+        <div style={{ display:"flex", gap:10 }}>
+          <button onClick={onClose} style={{ flex:1, padding:"10px 0", background:C.navyLight, border:"none", borderRadius:10, color:C.textMuted, cursor:"pointer", fontWeight:600, fontSize:13 }}>Cancel</button>
+          <button onClick={()=>{onConfirm();onClose();}} style={{ flex:1, padding:"10px 0", background:danger?C.coral:"transparent", border:`1.5px solid ${danger?C.coral:C.teal}`, borderRadius:10, color:danger?"#fff":C.teal, cursor:"pointer", fontWeight:700, fontSize:13 }}>
+            {danger ? "Delete" : "Confirm"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // GOAL CARD  — own component so useState doesn't break inside .map()
 // ─────────────────────────────────────────────────────────────────────────────
@@ -435,7 +457,10 @@ function GoalCard({ g, wallets, disp, onFund, onEdit }) {
         <div style={{ textAlign:"right" }}>
           <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:22, color:g.color }}>{pct.toFixed(0)}%</div>
           <div style={{ color:C.textMuted, fontSize:10 }}>of {disp(g.target_kes)}</div>
-          {onEdit&&<button onClick={()=>onEdit(g)} style={{background:"none",border:`1px solid ${C.navyLight}`,borderRadius:6,color:C.textMuted,padding:"3px 8px",cursor:"pointer",fontSize:10,marginTop:4}}>✏️ Edit</button>}
+          {onEdit&&<div style={{display:"flex",gap:5,marginTop:4}}>
+            <button onClick={()=>onEdit(g)} style={{background:"none",border:`1px solid ${C.navyLight}`,borderRadius:6,color:C.textMuted,padding:"3px 8px",cursor:"pointer",fontSize:10}}>✏️ Edit</button>
+            {onDelete&&<button onClick={()=>onDelete(g.id,g.name)} style={{background:"none",border:`1px solid ${C.coral}44`,borderRadius:6,color:C.coral,padding:"3px 8px",cursor:"pointer",fontSize:10}}>🗑 Delete</button>}
+          </div>}
         </div>
       </div>
       <Bar value={g.saved_kes} max={g.target_kes} color={g.color}/>
@@ -723,6 +748,11 @@ export default function App() {
   const [editLoan,    setEditLoan]    = useState(null);
   const [editRepay,   setEditRepay]   = useState(null); // { loan, repayment }
   const [editRefund,  setEditRefund]  = useState(null);
+
+  // Confirm dialog
+  const [confirm, setConfirm] = useState({ open:false, title:"", message:"", onConfirm:()=>{} });
+  const askConfirm = (title, message, onConfirm) => setConfirm({ open:true, title, message, onConfirm });
+  const closeConfirm = () => setConfirm(c=>({...c, open:false}));
 
   // Reconcile
   const [recoWallet,  setRecoWallet]  = useState("");
@@ -1251,6 +1281,79 @@ export default function App() {
     } catch(err) { showToast("Failed", C.coral); }
   };
 
+  // ── Delete handlers ──────────────────────────────────────────────────────────
+  const deleteTx = async (id) => {
+    try {
+      await txApi.remove(id);
+      const tx = txs.find(t=>t.id===id);
+      if (tx) {
+        const isIn = tx.type==="income"||tx.type==="transfer_in"||tx.type==="refund";
+        const wid  = tx.wallet||tx.wallet_id;
+        const amt  = tx.amount||parseFloat(tx.amount_kes||0);
+        setWallets(p=>p.map(w=>w.id===wid?{...w,balance:parseFloat(w.balance)+(isIn?-amt:amt)}:w));
+      }
+      setTxs(p=>p.filter(t=>t.id!==id));
+      showToast("Transaction deleted");
+    } catch(err) { showToast("Failed to delete", C.coral); }
+  };
+
+  const deleteWallet = async (id) => {
+    try {
+      await walletsApi.remove(id);
+      setWallets(p=>p.filter(w=>w.id!==id));
+      showToast("Account deleted");
+    } catch(err) { showToast(err?.response?.data?.error||"Failed to delete", C.coral); }
+  };
+
+  const deleteGoal = async (id) => {
+    try {
+      await goalsApi.remove(id);
+      setGoals(p=>p.filter(g=>g.id!==id));
+      showToast("Goal deleted");
+    } catch(err) { showToast("Failed to delete", C.coral); }
+  };
+
+  const deleteInvestment = async (id) => {
+    try {
+      await invsApi.remove(id);
+      setInvestments(p=>p.filter(i=>i.id!==id));
+      showToast("Investment deleted");
+    } catch(err) { showToast("Failed to delete", C.coral); }
+  };
+
+  const deleteLoan = async (id) => {
+    try {
+      await loansApi.remove(id);
+      setLoans(p=>p.filter(l=>l.id!==id));
+      showToast("Loan deleted");
+    } catch(err) { showToast("Failed to delete", C.coral); }
+  };
+
+  const deleteRecurring = async (id) => {
+    try {
+      await recurApi.remove(id);
+      setRecurring(p=>p.filter(r=>r.id!==id));
+      showToast("Recurring deleted");
+    } catch(err) { showToast("Failed to delete", C.coral); }
+  };
+
+  const deleteCategory = async (id, type) => {
+    try {
+      await catsApi.remove(id);
+      if (type==="expense") setExpCats(p=>p.filter(c=>c.id!==id));
+      else setIncCats(p=>p.filter(c=>c.id!==id));
+      showToast("Category deleted");
+    } catch(err) { showToast(err?.response?.data?.error||"Failed to delete", C.coral); }
+  };
+
+  const deactivateAccount = async () => {
+    try {
+      await authApi.deactivate();
+      logout();
+      showToast("Account deactivated");
+    } catch(err) { showToast("Failed to deactivate", C.coral); }
+  };
+
   // ── Export CSV (download from backend)
   // ── Export: transactions + wallets + goals as separate CSV downloads ───────
   const exportTransactions = async () => {
@@ -1582,6 +1685,7 @@ export default function App() {
           <Btn onClick={()=>{setEditTx(null);setFTx({...blankTx,wallet:wallets[0]?.id||"",category:expCats[0]?.id||""});openM("tx");}} small>+ Add</Btn>
           <button onClick={toggleTheme} title={theme==="dark"?"Switch to light mode":"Switch to dark mode"} style={{background:C.navyLight,border:`1px solid ${C.navyLight}`,borderRadius:8,color:C.textMuted,padding:"6px 10px",cursor:"pointer",fontSize:15,lineHeight:1,transition:"background 0.2s,color 0.2s"}} onMouseEnter={e=>{e.currentTarget.style.color=C.teal;}} onMouseLeave={e=>{e.currentTarget.style.color=C.textMuted;}}>{theme==="dark"?"☀️":"🌙"}</button>
           <button onClick={logout} className="desktop-only-btn" style={{background:"none",border:`1px solid ${C.navyLight}`,borderRadius:8,color:C.textMuted,padding:"6px 10px",cursor:"pointer",fontSize:11}}>Sign out</button>
+          <button onClick={()=>askConfirm("Deactivate Account","Your account will be deactivated and you will be signed out. Contact support to reactivate. Are you sure?",deactivateAccount)} className="desktop-only-btn" style={{background:"none",border:`1px solid ${C.coral}44`,borderRadius:8,color:C.coral,padding:"6px 10px",cursor:"pointer",fontSize:11}}>⚠ Deactivate</button>
         </div>
       </div>
 
@@ -1752,7 +1856,10 @@ export default function App() {
                     <div style={{textAlign:"right"}}>
                       <div style={{fontFamily:"'DM Serif Display',serif",fontSize:20,color:w.color}}>{fmtC(bal,w.currency,currencies)}</div>
                       {baseCurrency!==w.currency&&<div style={{color:C.textFaint,fontSize:10,marginTop:1}}>≈ {disp(bal)}</div>}
-                      <button onClick={()=>openEditWallet(w)} style={{background:"none",border:`1px solid ${C.navyLight}`,borderRadius:6,color:C.textMuted,padding:"3px 8px",cursor:"pointer",fontSize:10,marginTop:6}}>✏️ Edit</button>
+                      <div style={{display:"flex",gap:5,marginTop:6}}>
+                        <button onClick={()=>openEditWallet(w)} style={{background:"none",border:`1px solid ${C.navyLight}`,borderRadius:6,color:C.textMuted,padding:"3px 8px",cursor:"pointer",fontSize:10}}>✏️ Edit</button>
+                        <button onClick={()=>askConfirm("Delete Account",`Delete "${w.name}"? All transactions in this account will remain but the account will be removed. This cannot be undone.`,()=>deleteWallet(w.id))} style={{background:"none",border:`1px solid ${C.coral}44`,borderRadius:6,color:C.coral,padding:"3px 8px",cursor:"pointer",fontSize:10}}>🗑 Delete</button>
+                      </div>
                     </div>
                   </div>
                   <div style={{display:"flex",gap:14,fontSize:11,color:C.textMuted,marginBottom:8}}>
@@ -1887,6 +1994,7 @@ export default function App() {
                       {isRefund&&<button onClick={()=>openEditRefundModal(t)} style={{background:"none",border:"none",color:C.textMuted,cursor:"pointer",fontSize:11,padding:"2px 4px"}} title="Edit refund">✏️</button>}
                       {!isT&&!isRefund&&<button onClick={()=>openEditTx(t)} style={{background:"none",border:"none",color:C.textMuted,cursor:"pointer",fontSize:11,padding:"2px 4px"}} title="Edit">✏️</button>}
                       {t.type==="expense"&&<button onClick={()=>openRefundModal(t)} style={{background:"none",border:"none",color:"#9B59B6",cursor:"pointer",fontSize:11,padding:"2px 4px"}} title="Record refund">↩</button>}
+                      {!isT&&<button onClick={()=>askConfirm("Delete Transaction","This transaction will be permanently deleted and your account balance will be adjusted. This cannot be undone.",()=>deleteTx(t.id))} style={{background:"none",border:"none",color:C.coral,cursor:"pointer",fontSize:11,padding:"2px 4px"}} title="Delete">🗑</button>}
                     </div>
                   </div>
                 </div>;
@@ -1933,6 +2041,7 @@ export default function App() {
                     <div style={{display:"flex",flexDirection:"column",gap:4}}>
                       <button onClick={()=>{setFBudget({catId:c.id,catType:"expense",amount:String(c.budget||"")});openM("budget");}} style={{background:C.navyLight,border:"none",borderRadius:6,color:C.teal,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600}}>{c.budget>0?"Edit Budget":"Set Budget"}</button>
                       <button onClick={()=>toggleWatch(c.id)} style={{background:c.watch?C.gold+"22":C.navyLight,border:"none",borderRadius:6,color:c.watch?C.gold:C.textMuted,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600}}>{c.watch?"Watching":"Watch"}</button>
+                      <button onClick={()=>askConfirm("Delete Category",`Delete category "${c.name}"? Existing transactions won't be affected.`,()=>deleteCategory(c.id,"expense"))} style={{background:"none",border:`1px solid ${C.coral}44`,borderRadius:6,color:C.coral,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600}}>🗑 Delete</button>
                     </div>
                   </div>
                 </div>
@@ -1952,7 +2061,10 @@ export default function App() {
                         <div style={{fontSize:10,color:C.textMuted}}>{c.budget>0?`Target: ${disp(c.budget)}`:"No target"}</div>
                       </div>
                     </div>
-                    <button onClick={()=>{setFBudget({catId:c.id,catType:"income",amount:String(c.budget||"")});openM("budget");}} style={{background:C.navyLight,border:"none",borderRadius:6,color:C.teal,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600}}>{c.budget>0?"Edit":"Set Target"}</button>
+                    <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                      <button onClick={()=>{setFBudget({catId:c.id,catType:"income",amount:String(c.budget||"")});openM("budget");}} style={{background:C.navyLight,border:"none",borderRadius:6,color:C.teal,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600}}>{c.budget>0?"Edit":"Set Target"}</button>
+                      <button onClick={()=>askConfirm("Delete Category",`Delete category "${c.name}"? Existing transactions won't be affected.`,()=>deleteCategory(c.id,"income"))} style={{background:"none",border:`1px solid ${C.coral}44`,borderRadius:6,color:C.coral,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600}}>🗑 Delete</button>
+                    </div>
                   </div>
                   <div style={{fontFamily:"'DM Serif Display',serif",fontSize:20,color:c.color}}>{disp(earned)}</div>
                   {c.budget>0&&<div style={{marginTop:8}}><Bar value={earned} max={c.budget} color={c.color}/><div style={{color:C.textFaint,fontSize:10,marginTop:4}}>{Math.min((earned/c.budget)*100,100).toFixed(0)}% of target</div></div>}
@@ -1973,7 +2085,7 @@ export default function App() {
               <Btn onClick={()=>{setFGoal({...blankGoal,wallet:wallets[0]?.id||""});openM("goal");}}>+ New Goal</Btn>
             </div>
             <div className="grid-2" style={{ gap: 14 }}>
-              {goals.map(g=><GoalCard key={g.id} g={g} wallets={wallets} disp={disp} onFund={fundGoal} onEdit={openEditGoal}/>)}
+              {goals.map(g=><GoalCard key={g.id} g={g} wallets={wallets} disp={disp} onFund={fundGoal} onEdit={openEditGoal} onDelete={(id,name)=>askConfirm("Delete Goal",`Delete goal "${name}"? This cannot be undone.`,()=>deleteGoal(id))}/>)}
               {goals.length===0&&<div style={{gridColumn:"1/-1",textAlign:"center",color:C.textFaint,padding:"40px 0",fontSize:13}}>No goals yet. Create one to start saving with purpose.</div>}
             </div>
           </div>
@@ -2005,6 +2117,7 @@ export default function App() {
                     </div>
                     <div style={{fontWeight:700,color:r.type==="income"?C.teal:C.coral,fontSize:13,marginRight:8}}>{disp(r.amount)}/mo</div>
                     <button onClick={()=>toggleRecurring(r.id)} style={{background:r.active?C.teal+"22":C.coral+"22",border:"none",borderRadius:7,color:r.active?C.teal:C.coral,padding:"4px 9px",cursor:"pointer",fontSize:11,fontWeight:600,flexShrink:0}}>{r.active?"Active":"Paused"}</button>
+                    <button onClick={()=>askConfirm("Delete Recurring",`Delete "${r.merchant||r.note}"? This won't delete past transactions.`,()=>deleteRecurring(r.id))} style={{background:"none",border:`1px solid ${C.coral}44`,borderRadius:7,color:C.coral,padding:"4px 7px",cursor:"pointer",fontSize:11,flexShrink:0}}>🗑</button>
                   </div>;
                 })}
                 {recurring.filter(sec.filter).length===0&&<div style={{color:C.textFaint,fontSize:12,textAlign:"center",padding:"12px 0"}}>None added yet.</div>}
@@ -2067,6 +2180,7 @@ export default function App() {
                   <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8}}>
                     <Sparkline values={[inv.buyPrice,inv.buyPrice*0.93,inv.buyPrice*1.02,inv.buyPrice*0.97,inv.currentPrice*0.98,inv.currentPrice]} color={gain>=0?C.teal:C.coral} width={80} height={40}/>
                     <button onClick={()=>openEditInv(inv)} style={{background:"none",border:`1px solid ${C.navyLight}`,borderRadius:6,color:C.textMuted,padding:"3px 8px",cursor:"pointer",fontSize:10}}>✏️ Edit</button>
+                    <button onClick={()=>askConfirm("Delete Investment",`Delete "${inv.name}"? All return history will also be removed.`,()=>deleteInvestment(inv.id))} style={{background:"none",border:`1px solid ${C.coral}44`,borderRadius:6,color:C.coral,padding:"3px 8px",cursor:"pointer",fontSize:10}}>🗑 Delete</button>
                   </div>
                 </div>
               </Card>;
@@ -2104,7 +2218,10 @@ export default function App() {
                   <div style={{textAlign:"right"}}>
                     <div style={{fontFamily:"'DM Serif Display',serif",fontSize:22,color:C.coral}}>{disp(l.remaining)}</div>
                     <div style={{color:C.textMuted,fontSize:10}}>remaining</div>
-                    <button onClick={()=>openEditLoan(l)} style={{background:"none",border:`1px solid ${C.navyLight}`,borderRadius:6,color:C.textMuted,padding:"3px 8px",cursor:"pointer",fontSize:10,marginTop:4}}>✏️ Edit Loan</button>
+                    <div style={{display:"flex",gap:5,marginTop:4}}>
+                      <button onClick={()=>openEditLoan(l)} style={{background:"none",border:`1px solid ${C.navyLight}`,borderRadius:6,color:C.textMuted,padding:"3px 8px",cursor:"pointer",fontSize:10}}>✏️ Edit</button>
+                      <button onClick={()=>askConfirm("Delete Loan",`Delete loan "${l.name}"? All repayment history will also be removed.`,()=>deleteLoan(l.id))} style={{background:"none",border:`1px solid ${C.coral}44`,borderRadius:6,color:C.coral,padding:"3px 8px",cursor:"pointer",fontSize:10}}>🗑 Delete</button>
+                    </div>
                   </div>
                 </div>
                 <Bar value={paid} max={l.principal} color={C.teal}/>
@@ -2201,6 +2318,7 @@ export default function App() {
                 <Btn onClick={()=>openM("importExport")} outline color={C.textMuted} style={{padding:12}}>⬆⬇ Import/Export</Btn>
                 <button onClick={toggleTheme} style={{background:C.navyLight,border:`1px solid ${C.navyLight}`,borderRadius:10,color:C.textPrimary,padding:12,cursor:"pointer",fontSize:13,fontWeight:700}}>{theme==="dark"?"☀️ Light Mode":"🌙 Dark Mode"}</button>
                 <button onClick={logout} style={{background:"none",border:`1px solid ${C.coral}`,borderRadius:10,color:C.coral,padding:12,cursor:"pointer",fontSize:13,fontWeight:700}}>Sign out</button>
+              <button onClick={()=>askConfirm("Deactivate Account","Your account will be deactivated and you will be signed out. Contact support to reactivate. Are you sure?",deactivateAccount)} style={{background:"none",border:`1px solid ${C.coral}`,borderRadius:10,color:C.coral,padding:12,cursor:"pointer",fontSize:13,fontWeight:700,opacity:0.7}}>⚠ Deactivate Account</button>
               </div>
             </div>
           </div>
@@ -2542,6 +2660,15 @@ export default function App() {
           : <div style={{color:C.textMuted,fontSize:14,lineHeight:1.9,whiteSpace:"pre-wrap"}}>{aiText}</div>
         }
       </Modal>
+
+      {/* Confirm Dialog */}
+      <ConfirmModal
+        open={confirm.open}
+        onClose={closeConfirm}
+        onConfirm={confirm.onConfirm}
+        title={confirm.title}
+        message={confirm.message}
+      />
 
       {/* Bottom Navigation for Mobile */}
       <div className="mobile-bottom-nav" style={{

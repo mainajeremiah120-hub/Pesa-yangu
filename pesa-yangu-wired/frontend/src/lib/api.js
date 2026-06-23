@@ -72,6 +72,7 @@ export const authApi = {
   register: (p) => unwrap(client.post("/auth/register", p)),
   login:    (p) => unwrap(client.post("/auth/login",    p)),
   me:       ()  => unwrap(client.get("/auth/me")),
+  deactivate: () => unwrap(client.delete("/auth/account")),
   logout:   ()  => {
     const rt = localStorage.getItem("py_refresh_token");
     localStorage.removeItem("py_access_token");
@@ -85,6 +86,7 @@ export const walletsApi = {
   list:     ()         => unwrap(client.get("/wallets")),
   create:   (p)        => unwrap(client.post("/wallets", p)),
   update:   (id, p)    => unwrap(client.patch(`/wallets/${id}`, p)),
+  remove:   (id)       => unwrap(client.delete(`/wallets/${id}`)),
   transfer: (p)        => unwrap(client.post("/wallets/transfer", p)),
 };
 

@@ -19,10 +19,6 @@ router.get("/", async (req, res, next) => {
 
 router.post("/", async (req, res, next) => {
   try {
-    if (req.user.plan==="free") {
-      const {rows} = await query("SELECT COUNT(*) FROM wallets WHERE user_id=$1 AND is_archived=FALSE",[req.user.id]);
-      if (parseInt(rows[0].count)>=3) return res.status(403).json({error:"Free plan allows up to 3 accounts.",code:"PLAN_LIMIT"});
-    }
     const d = z.object({ name:z.string().min(1), account_type:z.string().default("current"), currency:z.string().length(3).default("KES"), balance:z.number().default(0), color:z.string().default("#00D4AA"), icon:z.string().default("🏦") }).parse(req.body);
     const {rows} = await query(
       "INSERT INTO wallets (user_id,name,account_type,currency,balance,color,icon) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
@@ -34,21 +30,6 @@ router.post("/", async (req, res, next) => {
 
 router.patch("/:id", async (req, res, next) => {
   try {
-<<<<<<< HEAD
-    const allowed=["name","color","icon","sort_order","is_archived","account_type","currency"];
-    const updates=Object.fromEntries(Object.entries(req.body).filter(([k])=>allowed.includes(k)));
-    // Handle balance separately with explicit balance adjustment
-    if(req.body.balance !== undefined) {
-      const newBal = parseFloat(req.body.balance);
-      if(!isNaN(newBal)) updates.balance = newBal;
-    }
-    if(!Object.keys(updates).length) return res.status(400).json({error:"No valid fields"});
-    const sets=Object.keys(updates).map((k,i)=>`${k}=$${i+3}`);
-    const {rows}=await query(`UPDATE wallets SET ${sets.join(",")} WHERE id=$1 AND user_id=$2 RETURNING *`,[req.params.id,req.user.id,...Object.values(updates)]);
-    if(!rows.length) return res.status(404).json({error:"Not found"});
-    res.json({wallet:rows[0]});
-  } catch(e){next(e);}
-=======
     const allowed = ["name","color","icon","sort_order","is_archived","account_type","currency","balance"];
     const updates = Object.fromEntries(Object.entries(req.body).filter(([k]) => allowed.includes(k)));
     if (!Object.keys(updates).length) return res.status(400).json({ error: "No valid fields" });
@@ -61,7 +42,18 @@ router.patch("/:id", async (req, res, next) => {
     if (!rows.length) return res.status(404).json({ error: "Not found" });
     res.json({ wallet: rows[0] });
   } catch(e) { next(e); }
->>>>>>> 814e2b196ec7bdf5bd5a0b1785c0fe9211499cb1
+});
+
+// DELETE /wallets/:id — archive (soft delete) the wallet
+router.delete("/:id", async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      "UPDATE wallets SET is_archived=TRUE WHERE id=$1 AND user_id=$2 RETURNING id",
+      [req.params.id, req.user.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Not found" });
+    res.json({ ok: true });
+  } catch(e) { next(e); }
 });
 
 router.post("/transfer", async (req, res, next) => {

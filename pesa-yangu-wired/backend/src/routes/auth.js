@@ -116,3 +116,12 @@ router.post("/logout", requireAuth, async (req, res, next) => {
 router.get("/me", requireAuth, (req, res) => res.json({ user: req.user }));
 
 module.exports = router;
+
+// DELETE /auth/account — deactivate (soft delete) the user account
+router.delete("/account", async (req, res, next) => {
+  try {
+    await query("UPDATE users SET is_active=FALSE, deactivated_at=NOW() WHERE id=$1", [req.user.id]);
+    await query("DELETE FROM refresh_tokens WHERE user_id=$1", [req.user.id]);
+    res.json({ ok: true });
+  } catch(err) { next(err); }
+});

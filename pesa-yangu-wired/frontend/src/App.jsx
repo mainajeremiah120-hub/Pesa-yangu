@@ -659,7 +659,7 @@ export default function App() {
     principal:      parseFloat(l.principal_kes||0),
     remaining:      parseFloat(l.remaining_kes||0),
     monthlyPayment: parseFloat(l.monthly_payment_kes||0),
-    nextDue:        l.next_due_date,
+    nextDue:        (l.next_due_date||"").slice(0,10)||null,
     repayments:     (l.repayments||[]).map(r=>({
       ...r,
       total:     parseFloat(r.total_kes||0),

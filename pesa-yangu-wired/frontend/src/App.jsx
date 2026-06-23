@@ -505,6 +505,9 @@ export default function App() {
   const score      = Math.max(10, Math.min(99, Math.round(68+savingsRate*0.35-overBudget.length*7)));
 
   // ── Filtered transactions for Records tab (real-time search)
+  // ── Search (declared here so filteredTxs useMemo can reference it without TDZ)
+  const [txSearch, setTxSearch] = useState("");
+
   const filteredTxs = useMemo(() => {
     const pool = limits.txHistory < Infinity ? txs.slice(0, limits.txHistory) : txs;
     if (!txSearch.trim()) return pool;
@@ -576,9 +579,6 @@ export default function App() {
   const [recoRows,    setRecoRows]    = useState([]);
   const [recoFile,    setRecoFile]    = useState(null);
   const [recoBusy,    setRecoBusy]    = useState(false);
-
-  // Search
-  const [txSearch, setTxSearch] = useState("");
 
   // Import
   const [importRows,  setImportRows]  = useState([]);

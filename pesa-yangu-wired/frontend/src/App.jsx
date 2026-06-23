@@ -15,7 +15,7 @@ import AuthPage from "./pages/AuthPage.jsx";
 import { useAuth } from "./hooks/useAuth.js";
 import {
   walletsApi, txApi, catsApi, goalsApi, invsApi,
-  loansApi, recurApi, fxApi, aiApi, billingApi, reconcileApi,
+  loansApi, recurApi, fxApi, aiApi, billingApi, reconcileApi, authApi,
 } from "./lib/api.js";
 import { tokens, getTheme, setTheme as persistTheme } from "./theme.js";
 
@@ -622,7 +622,7 @@ export default function App() {
   const disp = useCallback((amtKES) => fmtC(amtKES, baseCurrency, currencies), [baseCurrency, currencies]);
 
   // ── Load all data after login
-  useEffect(() => {
+  const loadData = useCallback(() => {
     if (!user) return;
     setDataLoading(true);
     setDataError("");
@@ -640,7 +640,6 @@ export default function App() {
       setWallets(w.wallets || []);
       setTxs((t.transactions || []).map(tx => ({
         ...tx,
-        // Normalise field names from backend snake_case → camelCase used in UI
         wallet:       tx.wallet_id,
         category:     tx.category_id,
         amount:       parseFloat(tx.amount_kes),
@@ -656,7 +655,6 @@ export default function App() {
       setInvestments((inv.investments||[]).map(normaliseInv));
       setLoans((l.loans||[]).map(normaliseLoan));
       setRecurring((r.recurring||[]).map(normaliseRecurring));
-      // Merge live FX rates into currency list
       if (fx.rates) {
         setCurrencies(prev => prev.map(c => fx.rates[c.code]
           ? { ...c, rate: 1/fx.rates[c.code] }
@@ -670,6 +668,8 @@ export default function App() {
     })
     .finally(() => setDataLoading(false));
   }, [user]);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   // ── Field normalisers (backend snake_case → UI expectations)
   const normaliseCategory = (c) => ({
@@ -1672,6 +1672,7 @@ export default function App() {
     {id:"investments",  label:"Invest",     icon:"📈"},
     {id:"loans",        label:"Loans",      icon:"🏦"},
     {id:"reconcile",    label:"Reconcile",  icon:"✅"},
+    {id:"settings",     label:"Settings",   icon:"⚙️"},
   ];
 
   const ACCT_TYPE = {current:"Current",savings:"Savings",investment:"Investment",cash:"Cash",digital:"Mobile Money"};
@@ -2437,6 +2438,102 @@ export default function App() {
         )}
 
         {/* ══ MORE MENU (MOBILE ONLY) ══════════════════════════════════════ */}
+        {tab==="settings"&&(()=>{
+          const NOTIF_KEY = "py_notif_prefs";
+          const loadNotif = () => { try { return JSON.parse(localStorage.getItem(NOTIF_KEY)||"{}"); } catch { return {}; } };
+          const saveNotif = (k,v) => { const p={...loadNotif(),[k]:v}; localStorage.setItem(NOTIF_KEY,JSON.stringify(p)); };
+          const NotifRow = ({label,desc,id}) => {
+            const [on,setOn] = useState(()=>loadNotif()[id]!==false);
+            return <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 0",borderBottom:`1px solid ${C.navyLight}`}}>
+              <div><div style={{fontSize:13,fontWeight:600,color:C.textPrimary}}>{label}</div><div style={{fontSize:11,color:C.textMuted,marginTop:2}}>{desc}</div></div>
+              <div onClick={()=>{const n=!on;setOn(n);saveNotif(id,n);}} style={{width:42,height:24,borderRadius:12,background:on?C.teal:C.navyLight,cursor:"pointer",position:"relative",transition:"background 0.2s",flexShrink:0}}>
+                <div style={{position:"absolute",top:3,left:on?20:3,width:18,height:18,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+              </div>
+            </div>;
+          };
+          const [editName,setEditName]=useState(user?.full_name||"");
+          const [savingName,setSavingName]=useState(false);
+          const saveName=async()=>{if(!editName.trim())return;setSavingName(true);try{const{user:u}=await authApi.updateProfile(editName.trim());updateUser({full_name:u.full_name});showToast("Name updated",C.teal);}catch{showToast("Failed to update name",C.coral);}finally{setSavingName(false);}};
+          return <div style={{display:"flex",flexDirection:"column",gap:20}}>
+            <div><div style={{fontFamily:"'DM Serif Display',serif",fontSize:24}}>Settings</div><div style={{color:C.textMuted,fontSize:12}}>Manage your account and preferences</div></div>
+
+            {/* Profile */}
+            <Card>
+              <div style={{fontWeight:700,fontSize:13,color:C.teal,marginBottom:14,textTransform:"uppercase",letterSpacing:"0.06em"}}>👤 Profile</div>
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:11,color:C.textMuted,marginBottom:5}}>Full Name</div>
+                <div style={{display:"flex",gap:8}}>
+                  <input value={editName} onChange={e=>setEditName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveName()}
+                    style={{flex:1,background:C.navyLight,border:`1px solid ${C.navyLight}`,borderRadius:10,padding:"10px 14px",color:C.textPrimary,fontSize:13,outline:"none"}}
+                    onFocus={e=>e.target.style.borderColor=C.teal} onBlur={e=>e.target.style.borderColor=C.navyLight}/>
+                  <button onClick={saveName} disabled={savingName||editName.trim()===user?.full_name} style={{background:C.teal,color:"#0B1120",border:"none",borderRadius:10,padding:"0 16px",fontWeight:700,fontSize:12,cursor:"pointer",opacity:(savingName||editName.trim()===user?.full_name)?0.5:1}}>{savingName?"Saving…":"Save"}</button>
+                </div>
+              </div>
+              <div>
+                <div style={{fontSize:11,color:C.textMuted,marginBottom:5}}>Email Address</div>
+                <div style={{background:C.navyLight,borderRadius:10,padding:"10px 14px",fontSize:13,color:C.textFaint}}>{user?.email}</div>
+              </div>
+            </Card>
+
+            {/* Display & Currency */}
+            <Card>
+              <div style={{fontWeight:700,fontSize:13,color:C.teal,marginBottom:14,textTransform:"uppercase",letterSpacing:"0.06em"}}>🌍 Display & Currency</div>
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:11,color:C.textMuted,marginBottom:6}}>Base Currency</div>
+                <select value={baseCurrency} onChange={e=>setBase(e.target.value)} style={{width:"100%",background:C.navyLight,border:`1px solid ${C.navyLight}`,borderRadius:10,padding:"10px 14px",color:C.textPrimary,fontSize:13,outline:"none",cursor:"pointer"}}>
+                  {currencies.map(c=><option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}
+                </select>
+                <div style={{fontSize:11,color:C.textMuted,marginTop:5}}>All amounts display in this currency using live rates</div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div><div style={{fontSize:13,fontWeight:600}}>Theme</div><div style={{fontSize:11,color:C.textMuted}}>Currently {theme==="dark"?"Dark":"Light"} mode</div></div>
+                <button onClick={toggleTheme} style={{background:C.navyLight,border:"none",borderRadius:10,padding:"8px 16px",color:C.textPrimary,cursor:"pointer",fontWeight:600,fontSize:12}}>{theme==="dark"?"☀️ Light Mode":"🌙 Dark Mode"}</button>
+              </div>
+            </Card>
+
+            {/* Notifications */}
+            <Card>
+              <div style={{fontWeight:700,fontSize:13,color:C.teal,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>🔔 Notification Preferences</div>
+              <div style={{fontSize:11,color:C.textMuted,marginBottom:14}}>Controls which alerts you see in the app</div>
+              <NotifRow id="budget_alerts"  label="Budget Alerts"       desc="Notify when a category exceeds its budget"/>
+              <NotifRow id="goal_reminders" label="Goal Reminders"      desc="Remind you of upcoming goal deadlines"/>
+              <NotifRow id="loan_due"       label="Loan Due Dates"      desc="Alert when a loan repayment is approaching"/>
+              <NotifRow id="weekly_summary" label="Weekly Summary"      desc="Show a weekly financial snapshot"/>
+            </Card>
+
+            {/* Data Management */}
+            <Card>
+              <div style={{fontWeight:700,fontSize:13,color:C.teal,marginBottom:14,textTransform:"uppercase",letterSpacing:"0.06em"}}>📁 Data Management</div>
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                <button onClick={exportTransactions} style={{background:C.navyLight,border:`1px solid ${C.navyLight}`,borderRadius:10,padding:"12px 16px",color:C.textPrimary,cursor:"pointer",fontWeight:600,fontSize:13,textAlign:"left",display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{fontSize:18}}>⬇️</span><div><div>Export Transactions</div><div style={{fontSize:11,color:C.textMuted,fontWeight:400}}>Download all records as CSV</div></div>
+                </button>
+                <button onClick={()=>openM("importExport")} style={{background:C.navyLight,border:`1px solid ${C.navyLight}`,borderRadius:10,padding:"12px 16px",color:C.textPrimary,cursor:"pointer",fontWeight:600,fontSize:13,textAlign:"left",display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{fontSize:18}}>⬆️</span><div><div>Import Transactions</div><div style={{fontSize:11,color:C.textMuted,fontWeight:400}}>Upload a CSV file to bulk-add records</div></div>
+                </button>
+                <button onClick={()=>askConfirm("Factory Reset","This will permanently delete ALL your financial data — accounts, transactions, goals, loans, investments and categories. Your login account is kept. This cannot be undone.",async()=>{try{await authApi.resetData();await loadData();showToast("All data cleared. Fresh start!",C.teal,4000);}catch{showToast("Reset failed",C.coral);}})} style={{background:"#E74C3C11",border:`1px solid #E74C3C44`,borderRadius:10,padding:"12px 16px",color:C.coral,cursor:"pointer",fontWeight:600,fontSize:13,textAlign:"left",display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{fontSize:18}}>🗑️</span><div><div>Factory Reset</div><div style={{fontSize:11,color:C.textMuted,fontWeight:400}}>Delete all data and start fresh</div></div>
+                </button>
+              </div>
+            </Card>
+
+            {/* Account Actions */}
+            <Card>
+              <div style={{fontWeight:700,fontSize:13,color:C.teal,marginBottom:14,textTransform:"uppercase",letterSpacing:"0.06em"}}>🔐 Account</div>
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                <button onClick={logout} style={{background:C.navyLight,border:`1px solid ${C.navyLight}`,borderRadius:10,padding:"12px 16px",color:C.textPrimary,cursor:"pointer",fontWeight:600,fontSize:13,textAlign:"left",display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{fontSize:18}}>🚪</span><div><div>Sign Out</div><div style={{fontSize:11,color:C.textMuted,fontWeight:400}}>Log out of this device</div></div>
+                </button>
+                <button onClick={()=>askConfirm("Deactivate Account","Your account will be deactivated and you will be signed out. Contact support to reactivate. Are you sure?",deactivateAccount)} style={{background:"#E74C3C11",border:`1px solid #E74C3C44`,borderRadius:10,padding:"12px 16px",color:C.coral,cursor:"pointer",fontWeight:600,fontSize:13,textAlign:"left",display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{fontSize:18}}>⚠️</span><div><div>Deactivate Account</div><div style={{fontSize:11,color:C.textMuted,fontWeight:400}}>Permanently disable your account</div></div>
+                </button>
+              </div>
+            </Card>
+
+            <div style={{textAlign:"center",fontSize:11,color:C.textFaint,paddingBottom:20}}>Pesa Yangu · Built for Kenya 🇰🇪</div>
+          </div>;
+        })()}
+
         {tab==="more"&&(
           <div style={{display:"flex",flexDirection:"column",gap:16}}>
             <div>

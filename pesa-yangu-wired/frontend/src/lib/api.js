@@ -73,8 +73,10 @@ export const authApi = {
   login:          (p)           => unwrap(client.post("/auth/login",    p)),
   me:             ()            => unwrap(client.get("/auth/me")),
   deactivate:     ()            => unwrap(client.delete("/auth/account")),
-  forgotPassword: (email)       => unwrap(client.post("/auth/forgot-password", { email })),
-  resetPassword:  (token, password) => unwrap(client.post("/auth/reset-password", { token, password })),
+  forgotPassword: (email)            => unwrap(client.post("/auth/forgot-password", { email })),
+  resetPassword:  (token, password)  => unwrap(client.post("/auth/reset-password", { token, password })),
+  updateProfile:  (full_name)        => unwrap(client.patch("/auth/profile", { full_name })),
+  resetData:      ()                 => unwrap(client.delete("/auth/data")),
   logout: () => {
     const rt = localStorage.getItem("py_refresh_token");
     localStorage.removeItem("py_access_token");

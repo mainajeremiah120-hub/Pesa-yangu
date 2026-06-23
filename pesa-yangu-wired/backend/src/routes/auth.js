@@ -144,8 +144,43 @@ router.post("/logout", requireAuth, async (req, res, next) => {
 // GET /auth/me
 router.get("/me", requireAuth, (req, res) => res.json({ user: req.user }));
 
+// PATCH /auth/profile — update display name
+router.patch("/profile", requireAuth, async (req, res, next) => {
+  try {
+    const { full_name } = z.object({ full_name: z.string().min(1).max(100) }).parse(req.body);
+    const { rows } = await query(
+      "UPDATE users SET full_name=$1 WHERE id=$2 RETURNING id,email,full_name,plan",
+      [full_name, req.user.id]
+    );
+    res.json({ user: rows[0] });
+  } catch(err) {
+    if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
+    next(err);
+  }
+});
+
+// DELETE /auth/data — factory reset: wipe all financial data, keep account
+router.delete("/data", requireAuth, async (req, res, next) => {
+  try {
+    await withTransaction(async (client) => {
+      const uid = req.user.id;
+      await client.query("DELETE FROM loan_repayments      WHERE loan_id IN (SELECT id FROM loans WHERE user_id=$1)", [uid]);
+      await client.query("DELETE FROM investment_returns   WHERE investment_id IN (SELECT id FROM investments WHERE user_id=$1)", [uid]);
+      await client.query("DELETE FROM transactions         WHERE user_id=$1", [uid]);
+      await client.query("DELETE FROM recurring_transactions WHERE user_id=$1", [uid]);
+      await client.query("DELETE FROM goals                WHERE user_id=$1", [uid]);
+      await client.query("DELETE FROM investments          WHERE user_id=$1", [uid]);
+      await client.query("DELETE FROM loans                WHERE user_id=$1", [uid]);
+      await client.query("DELETE FROM budgets              WHERE user_id=$1", [uid]);
+      await client.query("DELETE FROM wallets              WHERE user_id=$1", [uid]);
+      await client.query("DELETE FROM categories           WHERE user_id=$1", [uid]);
+    });
+    res.json({ ok: true });
+  } catch(err) { next(err); }
+});
+
 // DELETE /auth/account — deactivate (soft delete) the user account
-router.delete("/account", async (req, res, next) => {
+router.delete("/account", requireAuth, async (req, res, next) => {
   try {
     await query("UPDATE users SET is_active=FALSE WHERE id=$1", [req.user.id]);
     await query("DELETE FROM refresh_tokens WHERE user_id=$1", [req.user.id]);

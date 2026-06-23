@@ -76,7 +76,12 @@ router.delete("/:id", async (req, res, next) => {
 
     await query("DELETE FROM wallets WHERE id=$1", [req.params.id]);
     res.json({ ok: true });
-  } catch(e) { next(e); }
+  } catch(e) {
+    if (e.code === "23503") {
+      return res.status(409).json({ error: "Wallet has linked records and cannot be deleted." });
+    }
+    next(e);
+  }
 });
 
 router.post("/transfer", async (req, res, next) => {

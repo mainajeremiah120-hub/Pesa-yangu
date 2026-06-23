@@ -31,9 +31,11 @@ const ACCENT = {
 // ─────────────────────────────────────────────────────────────────────────────
 // PLAN LIMITS
 // ─────────────────────────────────────────────────────────────────────────────
+// All features unlocked — billing restrictions removed
 const PLAN_LIMITS = {
-  free: { wallets:3, txHistory:100, goals:2, investments:3, loans:2,
-          aiAdvice:false, reconcile:false, multiCurrency:false },
+  free: { wallets:Infinity, txHistory:Infinity, goals:Infinity,
+          investments:Infinity, loans:Infinity, aiAdvice:true,
+          reconcile:true, multiCurrency:true },
   pro:  { wallets:Infinity, txHistory:Infinity, goals:Infinity,
           investments:Infinity, loans:Infinity, aiAdvice:true,
           reconcile:true, multiCurrency:true },
@@ -790,7 +792,6 @@ export default function App() {
 
   const addWallet = async () => {
     if(!fWal.name) return;
-    if(wallets.length>=limits.wallets) { openM("billing"); return; }
     try {
       const bal = toKES(parseFloat(fWal.openingBalance)||0, fWal.currency, currencies);
       const { wallet } = await walletsApi.create({
@@ -845,7 +846,6 @@ export default function App() {
   };
 
   const addLoan = async () => {
-    if(loans.length>=limits.loans) { openM("billing"); return; }
     const p = parseFloat(fLoan.principal); if(!p||!fLoan.name) return;
     try {
       const { loan } = await loansApi.create({
@@ -884,7 +884,6 @@ export default function App() {
   };
 
   const addInvestment = async () => {
-    if(investments.length>=limits.investments) { openM("billing"); return; }
     const units=parseFloat(fInv.units), price=parseFloat(fInv.buyPrice);
     if(!units||!price||!fInv.name) return;
     try {
@@ -922,7 +921,6 @@ export default function App() {
   };
 
   const addGoal = async () => {
-    if(goals.length>=limits.goals) { openM("billing"); return; }
     const t=parseFloat(fGoal.target); if(!t||!fGoal.name) return;
     try {
       const { goal } = await goalsApi.create({
@@ -1371,7 +1369,6 @@ export default function App() {
 
   // ── AI Advice
   const getAI = async () => {
-    if(!limits.aiAdvice) { openM("billing"); return; }
     setAiLoading(true); setAiText(""); openM("ai");
     const ctx = {
       netWorth:disp(netWorth), totalBalance:disp(totalBalance),
@@ -1573,13 +1570,10 @@ export default function App() {
         <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
           <div style={{width:30,height:30,background:`linear-gradient(135deg,${C.teal},${C.blue})`,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800}}>◈</div>
           <span style={{fontWeight:800,fontSize:16,letterSpacing:"-0.02em"}}>Pesa Yangu</span>
-          <Badge color={plan==="pro"?C.gold:C.textFaint}>{plan==="pro"?"Pro ✦":"Free"}</Badge>
         </div>
-        {plan==="pro"&&(
-          <select value={baseCurrency} onChange={e=>setBase(e.target.value)} style={{background:C.navyLight,border:"none",borderRadius:8,color:C.textPrimary,padding:"5px 10px",fontSize:12,cursor:"pointer",outline:"none"}}>
-            {currencies.map(c=><option key={c.code} value={c.code}>{c.code} {c.symbol}</option>)}
-          </select>
-        )}
+        <select value={baseCurrency} onChange={e=>setBase(e.target.value)} style={{background:C.navyLight,border:"none",borderRadius:8,color:C.textPrimary,padding:"5px 10px",fontSize:12,cursor:"pointer",outline:"none"}}>
+          {currencies.map(c=><option key={c.code} value={c.code}>{c.code} {c.symbol}</option>)}
+        </select>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end",alignItems:"center"}}>
           <Btn onClick={()=>{setFXfer({...blankXfer,from:wallets[0]?.id||"",to:wallets[1]?.id||""});openM("xfer");}} outline color={C.blue} small className="desktop-only-btn">⇄ Transfer</Btn>
           <Btn onClick={()=>openM("share")} outline color={C.purple} small className="desktop-only-btn">📤 Share</Btn>
@@ -1897,10 +1891,7 @@ export default function App() {
                   </div>
                 </div>;
               })}
-              {!txSearch && limits.txHistory<txs.length&&<div style={{padding:16,textAlign:"center"}}>
-                <div style={{color:C.textMuted,fontSize:12,marginBottom:10}}>Showing {limits.txHistory} of {txs.length}</div>
-                <Btn onClick={()=>openM("billing")} color={C.gold} small>Upgrade for full history</Btn>
-              </div>}
+
             </Card>
           </div>
         )}
@@ -2147,15 +2138,7 @@ export default function App() {
         {tab==="reconcile"&&(
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div><div style={{fontFamily:"'DM Serif Display',serif",fontSize:24}}>Statement Reconciliation</div><div style={{color:C.textMuted,fontSize:12}}>Upload a bank statement CSV to match and import transactions</div></div>
-            {!limits.reconcile?(
-              <Card style={{textAlign:"center",padding:40,border:`1px dashed ${C.gold}44`}}>
-                <div style={{fontSize:22,marginBottom:6}}>✦</div>
-                <div style={{fontWeight:700,fontSize:13,marginBottom:4,color:C.gold}}>Pro Feature</div>
-                <div style={{color:C.textMuted,fontSize:12,marginBottom:12}}>Upgrade to Pesa Yangu Pro to unlock statement reconciliation.</div>
-                <Btn onClick={()=>openM("billing")} color={C.gold}>Upgrade to Pro</Btn>
-              </Card>
-            ):(
-              <>
+            <>
                 <Card>
                   <Field label="Account to Reconcile" value={recoWallet} onChange={v=>{setRecoWallet(v);setRecoRows([]);setRecoFile(null);}} options={[{value:"",label:"Select account…"},...wOpts]}/>
                   <FileUpload label="Bank Statement (CSV)" accept=".csv,.txt" onFile={handleRecoFile} files={recoFile?[recoFile]:[]}/>
@@ -2180,8 +2163,7 @@ export default function App() {
                   </Card>
                 </>}
                 {!recoFile&&<Card style={{textAlign:"center",padding:40}}><div style={{fontSize:36,marginBottom:12}}>📂</div><div style={{fontWeight:600,fontSize:15,marginBottom:6}}>No statement uploaded</div><div style={{color:C.textMuted,fontSize:12,lineHeight:1.7}}>Upload a CSV from KCB, Equity, Co-op, NCBA, or M-Pesa.</div></Card>}
-              </>
-            )}
+            </>
           </div>
         )}
 
@@ -2538,35 +2520,16 @@ export default function App() {
         </div>
       </Modal>
 
-      {/* Billing */}
-      <Modal open={isOpen("billing")} onClose={()=>closeM("billing")} title="✦ Pesa Yangu Plans" wide>
-        <div className="grid-2" style={{gap:16}}>
-          <div style={{background:C.navyLight,borderRadius:16,padding:20}}>
-            <div style={{fontWeight:800,fontSize:18,marginBottom:4}}>Free</div>
-            <div style={{fontFamily:"'DM Serif Display',serif",fontSize:28,color:C.textMuted,marginBottom:14}}>KSh 0<span style={{fontSize:14,fontWeight:400}}>/mo</span></div>
-            {[{ok:true,txt:"3 accounts"},{ok:true,txt:"2 goals / 2 loans / 3 investments"},{ok:true,txt:"Last 100 transactions"},{ok:true,txt:"Budget & category tracking"},{ok:true,txt:"CSV import & export"},{ok:true,txt:"App sharing"},{ok:false,txt:"Multi-currency display"},{ok:false,txt:"Statement reconciliation"},{ok:false,txt:"AI financial advisor"},{ok:false,txt:"Unlimited everything"}].map((f,i)=>(
-              <div key={i} style={{display:"flex",alignItems:"center",gap:8,fontSize:12,marginBottom:6}}>
-                <span style={{color:f.ok?C.teal:C.textFaint,fontSize:14}}>{f.ok?"✓":"✗"}</span>
-                <span style={{color:f.ok?C.textPrimary:C.textFaint}}>{f.txt}</span>
-              </div>
-            ))}
-            {plan==="free"&&<div style={{background:C.teal+"22",color:C.teal,borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:600,textAlign:"center",marginTop:12}}>Current Plan</div>}
-          </div>
-          <div style={{background:`linear-gradient(135deg,${C.gold}11,${C.blue}11)`,borderRadius:16,padding:20,border:`1.5px solid ${C.gold}44`}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}><div style={{fontWeight:800,fontSize:18}}>Pro</div><Badge color={C.gold}>✦ Recommended</Badge></div>
-            <div style={{fontFamily:"'DM Serif Display',serif",fontSize:28,color:C.gold,marginBottom:14}}>KSh 499<span style={{fontSize:14,fontWeight:400,color:C.textMuted}}>/mo</span></div>
-            {["Unlimited accounts, goals, loans, investments","Full transaction history","Multi-currency (8 currencies)","Statement reconciliation","✦ AI financial advisor","Priority support"].map((f,i)=>(
-              <div key={i} style={{display:"flex",alignItems:"center",gap:8,fontSize:12,marginBottom:6}}>
-                <span style={{color:C.gold,fontSize:14}}>✓</span><span>{f}</span>
-              </div>
-            ))}
-            {plan==="pro"
-              ? <div style={{background:C.gold+"22",color:C.gold,borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:600,textAlign:"center",marginTop:12}}>Current Plan ✦</div>
-              : <Btn onClick={handleUpgrade} color={C.gold} style={{width:"100%",padding:13,fontSize:14,marginTop:12}}>Upgrade to Pro — KSh 499/mo</Btn>
-            }
+      {/* Billing — placeholder, all features currently unlocked */}
+      <Modal open={isOpen("billing")} onClose={()=>closeM("billing")} title="Pesa Yangu">
+        <div style={{textAlign:"center",padding:"24px 0"}}>
+          <div style={{fontSize:40,marginBottom:12}}>◈</div>
+          <div style={{fontWeight:700,fontSize:16,marginBottom:8,color:C.teal}}>All Features Unlocked</div>
+          <div style={{color:C.textMuted,fontSize:13,lineHeight:1.7}}>
+            You have full access to all Pesa Yangu features including<br/>
+            unlimited accounts, AI advisor, reconciliation, and more.
           </div>
         </div>
-        <div style={{marginTop:16,color:C.textFaint,fontSize:11,textAlign:"center"}}>Cancel anytime · Secure payment via M-Pesa, Visa or Mastercard</div>
       </Modal>
 
       {/* AI Advisor */}

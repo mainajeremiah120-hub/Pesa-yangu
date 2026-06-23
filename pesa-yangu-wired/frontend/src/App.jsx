@@ -583,6 +583,34 @@ export default function App() {
   const [toast,        setToast] = useState(null);
   const [aiLoading,    setAiLoading] = useState(false);
   const [aiText,       setAiText]    = useState("");
+  const [idleWarning,  setIdleWarning] = useState(false); // show 1-min warning
+
+  // ── Auto-logout after 15 min inactivity (warn at 14 min)
+  useEffect(() => {
+    if (!user) return;
+    const WARN_MS   = 14 * 60 * 1000;
+    const LOGOUT_MS = 15 * 60 * 1000;
+    let warnTimer, logoutTimer;
+    const reset = () => {
+      setIdleWarning(false);
+      clearTimeout(warnTimer);
+      clearTimeout(logoutTimer);
+      warnTimer   = setTimeout(() => setIdleWarning(true), WARN_MS);
+      logoutTimer = setTimeout(() => {
+        setIdleWarning(false);
+        logout();
+        showToast("You were signed out due to inactivity.", "#E74C3C", 5000);
+      }, LOGOUT_MS);
+    };
+    const EVENTS = ["mousemove","mousedown","keydown","touchstart","scroll","click"];
+    EVENTS.forEach(ev => window.addEventListener(ev, reset, { passive: true }));
+    reset();
+    return () => {
+      clearTimeout(warnTimer);
+      clearTimeout(logoutTimer);
+      EVENTS.forEach(ev => window.removeEventListener(ev, reset));
+    };
+  }, [user, logout]);
 
   // ── Toast helper
   const showToast = useCallback((msg, color=C.teal, duration=2800) => {
@@ -2811,6 +2839,24 @@ export default function App() {
       </Modal>
 
       {/* AI Advisor */}
+      {/* ── Idle warning overlay ── */}
+      {idleWarning&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div style={{background:C.navyMid,border:`1px solid ${C.coral}`,borderRadius:20,padding:"32px 28px",maxWidth:380,width:"90%",textAlign:"center",boxShadow:`0 20px 60px rgba(0,0,0,0.5)`}}>
+            <div style={{fontSize:36,marginBottom:12}}>⏱️</div>
+            <div style={{fontWeight:700,fontSize:17,color:C.textPrimary,marginBottom:8}}>Still there?</div>
+            <div style={{color:C.textMuted,fontSize:13,marginBottom:24,lineHeight:1.6}}>
+              You'll be signed out in <strong style={{color:C.coral}}>1 minute</strong> due to inactivity.
+            </div>
+            <button
+              onClick={()=>setIdleWarning(false)}
+              style={{background:C.teal,color:"#fff",border:"none",borderRadius:12,padding:"12px 32px",fontSize:14,fontWeight:700,cursor:"pointer",width:"100%"}}>
+              Yes, keep me signed in
+            </button>
+          </div>
+        </div>
+      )}
+
       <Modal open={isOpen("ai")} onClose={()=>closeM("ai")} title="✦ AI Financial Advisor" wide>
         {aiLoading
           ? <div style={{textAlign:"center",padding:"48px 0",color:C.textMuted}}>

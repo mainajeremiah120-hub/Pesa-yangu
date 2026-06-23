@@ -2416,8 +2416,11 @@ export default function App() {
 
       {/* Transfer */}
       <Modal open={isOpen("xfer")} onClose={()=>closeM("xfer")} title="⇄ Transfer Between Accounts">
-        <Field label="From" value={fXfer.from} onChange={v=>setFXfer({...fXfer,from:v})} options={wOpts}/>
-        <Field label="To"   value={fXfer.to}   onChange={v=>setFXfer({...fXfer,to:v})}   options={wallets.filter(w=>w.id!==fXfer.from).map(w=>({value:w.id,label:`${w.icon} ${w.name}`}))}/>
+        <Field label="From" value={fXfer.from} onChange={v=>{
+          const newTo = fXfer.to===v ? (wallets.find(w=>w.id!==v)?.id||"") : fXfer.to;
+          setFXfer({...fXfer,from:v,to:newTo});
+        }} options={wOpts}/>
+        <Field label="To" value={fXfer.to} onChange={v=>setFXfer({...fXfer,to:v})} options={wallets.filter(w=>w.id!==fXfer.from).map(w=>({value:w.id,label:`${w.icon} ${w.name}`}))}/>
         <Field label="Amount" type="number" value={fXfer.amount} onChange={v=>setFXfer({...fXfer,amount:v})} placeholder="0.00" note="In source account's currency"/>
         <Field label="Note (optional)" value={fXfer.note} onChange={v=>setFXfer({...fXfer,note:v})} placeholder="e.g. Moving to savings"/>
         <Btn onClick={doTransfer} style={{width:"100%",padding:13,fontSize:14}}>Transfer Funds</Btn>

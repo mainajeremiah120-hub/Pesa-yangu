@@ -187,9 +187,17 @@ export const aiApi = {
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 export const adminApi = {
-  stats:      ()         => unwrap(client.get("/admin/stats")),
-  users:      (search)   => unwrap(client.get("/admin/users", { params: { search } })),
-  updateUser: (id, patch)=> unwrap(client.patch(`/admin/users/${id}`, patch)),
+  stats:         ()           => unwrap(client.get("/admin/stats")),
+  users:         (search)     => unwrap(client.get("/admin/users", { params: { search } })),
+  updateUser:    (id, patch)  => unwrap(client.patch(`/admin/users/${id}`, patch)),
+  tickets:       (status)     => unwrap(client.get("/admin/tickets", { params: { status } })),
+  replyTicket:   (id, patch)  => unwrap(client.patch(`/admin/tickets/${id}`, patch)),
+};
+
+// ── Support Tickets (user) ────────────────────────────────────────────────────
+export const ticketsApi = {
+  list:   ()    => unwrap(client.get("/tickets")),
+  create: (p)   => unwrap(client.post("/tickets", p)),
 };
 
 // ── Billing ───────────────────────────────────────────────────────────────────

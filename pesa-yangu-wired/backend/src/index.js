@@ -35,6 +35,7 @@ async function runMigrations() {
 // ── Routes
 const authRoutes        = require("./routes/auth");
 const adminRoutes       = require("./routes/admin");
+const ticketRoutes      = require("./routes/tickets");
 const walletRoutes      = require("./routes/wallets");
 const transactionRoutes = require("./routes/transactions");
 const { requireAuth, requireAdmin } = require("./middleware/auth");
@@ -99,6 +100,7 @@ app.get("/health", async (_req, res) => {
 const v1 = express.Router();
 v1.use("/auth",        authRoutes);
 v1.use("/admin",       requireAuth, requireAdmin, adminRoutes);
+v1.use("/tickets",     requireAuth, ticketRoutes);
 v1.use("/fx-rates",    fxRoutes);
 
 v1.use("/wallets",      requireAuth, walletRoutes);

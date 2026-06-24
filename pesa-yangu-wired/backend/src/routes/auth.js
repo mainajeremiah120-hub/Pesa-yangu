@@ -159,8 +159,8 @@ router.patch("/profile", requireAuth, async (req, res, next) => {
   }
 });
 
-// DELETE /auth/data — factory reset: wipe all financial data, keep account
-router.delete("/data", requireAuth, async (req, res, next) => {
+// POST /auth/reset-data — factory reset: wipe all financial data, keep account
+router.post("/reset-data", requireAuth, async (req, res, next) => {
   try {
     await withTransaction(async (client) => {
       const uid = req.user.id;

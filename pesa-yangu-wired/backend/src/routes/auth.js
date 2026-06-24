@@ -164,16 +164,15 @@ router.delete("/data", requireAuth, async (req, res, next) => {
   try {
     await withTransaction(async (client) => {
       const uid = req.user.id;
-      await client.query("DELETE FROM loan_repayments      WHERE loan_id IN (SELECT id FROM loans WHERE user_id=$1)", [uid]);
-      await client.query("DELETE FROM investment_returns   WHERE investment_id IN (SELECT id FROM investments WHERE user_id=$1)", [uid]);
-      await client.query("DELETE FROM transactions         WHERE user_id=$1", [uid]);
+      await client.query("DELETE FROM loan_repayments        WHERE user_id=$1", [uid]);
+      await client.query("DELETE FROM investment_returns     WHERE user_id=$1", [uid]);
+      await client.query("DELETE FROM transactions           WHERE user_id=$1", [uid]);
       await client.query("DELETE FROM recurring_transactions WHERE user_id=$1", [uid]);
-      await client.query("DELETE FROM goals                WHERE user_id=$1", [uid]);
-      await client.query("DELETE FROM investments          WHERE user_id=$1", [uid]);
-      await client.query("DELETE FROM loans                WHERE user_id=$1", [uid]);
-      await client.query("DELETE FROM budgets              WHERE user_id=$1", [uid]);
-      await client.query("DELETE FROM wallets              WHERE user_id=$1", [uid]);
-      await client.query("DELETE FROM categories           WHERE user_id=$1", [uid]);
+      await client.query("DELETE FROM goals                  WHERE user_id=$1", [uid]);
+      await client.query("DELETE FROM investments            WHERE user_id=$1", [uid]);
+      await client.query("DELETE FROM loans                  WHERE user_id=$1", [uid]);
+      await client.query("DELETE FROM wallets                WHERE user_id=$1", [uid]);
+      await client.query("DELETE FROM categories             WHERE user_id=$1", [uid]);
     });
     res.json({ ok: true });
   } catch(err) { next(err); }

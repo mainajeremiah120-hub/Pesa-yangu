@@ -854,6 +854,27 @@ export default function App() {
   const netWorth       = totalBalance + portfolioValue - totalDebt;
   const savingsRate    = totalIncome>0 ? ((totalIncome-totalExpense)/totalIncome)*100 : 0;
 
+  // Last 6 months of expenses from real transaction data
+  const last6MonthsExpenses = useMemo(() => {
+    const now = new Date();
+    return Array.from({length:6}, (_,i) => {
+      const d = new Date(now.getFullYear(), now.getMonth()-5+i, 1);
+      const yr = d.getFullYear(), mo = d.getMonth();
+      const label = d.toLocaleString("default",{month:"short"});
+      const value = txs
+        .filter(t => t.type==="expense" && t.date)
+        .reduce((s,t) => {
+          const td = new Date(t.date);
+          return (td.getFullYear()===yr && td.getMonth()===mo) ? s+t.amount : s;
+        }, 0);
+      return { label, value, highlight: i===5 };
+    });
+  }, [txs]);
+  const avgMonthlyExpense = useMemo(() => {
+    const nonZero = last6MonthsExpenses.slice(0,5).filter(m=>m.value>0);
+    return nonZero.length ? nonZero.reduce((s,m)=>s+m.value,0)/nonZero.length : 0;
+  }, [last6MonthsExpenses]);
+
   const spendByCat = useMemo(()=>{
     const m={};
     expCats.forEach(c=>m[c.id]=0);
@@ -2107,10 +2128,10 @@ export default function App() {
               </Card>
               <Card onClick={() => setTab("transactions")}>
                 <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>Monthly Expenses</div>
-                <MiniBar height={100} data={[{label:"Jan",value:62000},{label:"Feb",value:71000},{label:"Mar",value:58000},{label:"Apr",value:80000},{label:"May",value:74000},{label:"Jun",value:totalExpense,highlight:true}]}/>
+                <MiniBar height={100} data={last6MonthsExpenses}/>
                 <div style={{display:"flex",gap:10,marginTop:10}}>
-                  <Chip label="Avg/Month" value={disp(69000)} color={C.textMuted}/>
-                  <Chip label="This Month" value={disp(totalExpense)} color={totalExpense>80000?C.coral:C.teal}/>
+                  <Chip label="Avg/Month" value={disp(avgMonthlyExpense)} color={C.textMuted}/>
+                  <Chip label="This Month" value={disp(totalExpense)} color={avgMonthlyExpense>0&&totalExpense>avgMonthlyExpense*1.2?C.coral:C.teal}/>
                 </div>
               </Card>
             </div>

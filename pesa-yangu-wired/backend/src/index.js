@@ -88,7 +88,7 @@ app.use("/api/", rateLimit({
 app.get("/health", async (_req, res) => {
   try {
     await pool.query("SELECT 1");
-    res.json({ status: "ok", ts: new Date().toISOString() });
+    res.json({ status: "ok", ts: new Date().toISOString(), build: "f8897cb" });
   } catch {
     res.status(503).json({ status: "degraded", error: "DB unreachable" });
   }

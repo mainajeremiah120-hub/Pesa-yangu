@@ -641,7 +641,7 @@ function SettingsTab({ user, C, theme, toggleTheme, baseCurrency, setBase, curre
           {rowBtn("⬆️","Import Transactions","Upload a CSV file to bulk-add records", ()=>openM("importExport"))}
           {rowBtn("🗑️","Factory Reset","Delete all data and start fresh",
             ()=>askConfirm("Factory Reset","This will permanently delete ALL your financial data — accounts, transactions, goals, loans, investments and categories. Your login account is kept. This cannot be undone.",
-              async()=>{try{await authApi.resetData();await loadData();showToast("All data cleared. Fresh start!",C.teal,4000);}catch{showToast("Reset failed",C.coral);}}),
+              async()=>{try{await authApi.resetData();await loadData();showToast("All data cleared. Fresh start!",C.teal,4000);}catch(e){const msg=e?.response?.data?.error||e?.message||"Unknown error";console.error("Factory reset error:",e);showToast("Reset failed: "+msg,C.coral,6000);}}),
             true)}
         </div>
       </Card>

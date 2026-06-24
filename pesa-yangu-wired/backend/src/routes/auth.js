@@ -160,10 +160,10 @@ router.patch("/profile", requireAuth, async (req, res, next) => {
 });
 
 // POST /auth/reset-data — factory reset: wipe all financial data, keep account
-router.post("/reset-data", requireAuth, async (req, res, next) => {
+router.post("/reset-data", requireAuth, async (req, res) => {
+  const uid = req.user.id;
   try {
     await withTransaction(async (client) => {
-      const uid = req.user.id;
       await client.query("DELETE FROM loan_repayments        WHERE user_id=$1", [uid]);
       await client.query("DELETE FROM investment_returns     WHERE user_id=$1", [uid]);
       await client.query("DELETE FROM transactions           WHERE user_id=$1", [uid]);
@@ -175,7 +175,10 @@ router.post("/reset-data", requireAuth, async (req, res, next) => {
       await client.query("DELETE FROM categories             WHERE user_id=$1", [uid]);
     });
     res.json({ ok: true });
-  } catch(err) { next(err); }
+  } catch(err) {
+    logger.error({ msg: "Factory reset failed", uid, error: err.message });
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // DELETE /auth/account — deactivate (soft delete) the user account

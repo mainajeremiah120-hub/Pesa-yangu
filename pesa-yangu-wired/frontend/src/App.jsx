@@ -971,10 +971,13 @@ export default function App() {
   const [recoBusy,    setRecoBusy]    = useState(false);
 
   // Import
-  const [importRows,   setImportRows]  = useState([]);   // validated preview rows
-  const [importBusy,   setImportBusy]  = useState(false);
-  const [importErrors, setImportErrors]= useState([]);   // skipped row messages
-  const [importStep,   setImportStep]  = useState("upload"); // "upload" | "preview"
+  const [importRows,       setImportRows]      = useState([]);
+  const [importBusy,       setImportBusy]      = useState(false);
+  const [importErrors,     setImportErrors]    = useState([]);
+  const [importStep,       setImportStep]      = useState("upload"); // "upload" | "new-items" | "preview"
+  const [importParsedRows, setImportParsedRows]= useState([]); // raw rows before validation
+  const [importNewWallets, setImportNewWallets]= useState([]); // [{name, type, selected}]
+  const [importNewCats,    setImportNewCats]   = useState([]); // [{name, type, selected}]
 
   // ─────────────────────────────────────────────────────────────────────────
   // API ACTIONS  (optimistic UI: update state first, then call API)
@@ -1662,18 +1665,84 @@ export default function App() {
 
   // ── Import CSV
   // ── Import: client-side parse → preview → confirm ───────────────────────────
+  const resetImport = () => {
+    setImportRows([]); setImportErrors([]); setImportStep("upload");
+    setImportParsedRows([]); setImportNewWallets([]); setImportNewCats([]);
+  };
+
   const handleImportFile = (file) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       const { rows } = parseCSV(e.target.result);
-      const validated = validateImportRows(rows, wallets, expCats, incCats);
-      const valid   = validated.filter(r => r._valid);
-      const invalid = validated.filter(r => !r._valid);
-      setImportRows(validated);
-      setImportErrors(invalid.map(r => `Row ${r._row}: ${r._errors.join(", ")}`));
-      setImportStep("preview");
+      setImportParsedRows(rows);
+
+      // Detect wallet names in CSV that don't exist in the app
+      const knownWalletNames = new Set(wallets.map(w => w.name.toLowerCase()));
+      const newWalletNames = new Set();
+      rows.forEach(r => {
+        if (r.wallet     && !knownWalletNames.has((r.wallet     ||"").toLowerCase())) newWalletNames.add(r.wallet);
+        if (r.from_wallet && !knownWalletNames.has((r.from_wallet||"").toLowerCase())) newWalletNames.add(r.from_wallet);
+        if (r.to_wallet   && !knownWalletNames.has((r.to_wallet  ||"").toLowerCase())) newWalletNames.add(r.to_wallet);
+      });
+
+      // Detect category names in CSV that don't exist
+      const knownCatKeys = new Set([
+        ...expCats.map(c => c.name.toLowerCase()+":expense"),
+        ...incCats.map(c => c.name.toLowerCase()+":income"),
+      ]);
+      const newCatMap = new Map(); // "name:type" → {name, type}
+      rows.forEach(r => {
+        if (!r.category) return;
+        const t = (r.type||"expense").toLowerCase();
+        const catType = t === "income" ? "income" : "expense";
+        const key = r.category.toLowerCase()+":"+catType;
+        if (!knownCatKeys.has(key)) newCatMap.set(key, { name: r.category, type: catType });
+      });
+
+      const newWallets = [...newWalletNames].map(name => ({ name, type: "current", selected: true }));
+      const newCats    = [...newCatMap.values()].map(c => ({ ...c, selected: true }));
+
+      if (newWallets.length || newCats.length) {
+        setImportNewWallets(newWallets);
+        setImportNewCats(newCats);
+        setImportStep("new-items");
+      } else {
+        const validated = validateImportRows(rows, wallets, expCats, incCats);
+        setImportRows(validated);
+        setImportErrors(validated.filter(r=>!r._valid).map(r=>`Row ${r._row}: ${r._errors.join(", ")}`));
+        setImportStep("preview");
+      }
     };
     reader.readAsText(file);
+  };
+
+  const confirmNewItems = async () => {
+    setImportBusy(true);
+    try {
+      // Create selected wallets
+      for (const w of importNewWallets.filter(w => w.selected)) {
+        await walletsApi.create({ name: w.name, account_type: w.type, currency: "KES", balance: 0, color: "#00D4AA", icon: "🏦" });
+      }
+      // Create selected categories
+      for (const c of importNewCats.filter(c => c.selected)) {
+        await catsApi.create({ name: c.name, type: c.type, icon: c.type==="income"?"💰":"🏷️", color:"#4A90E2" });
+      }
+      // Reload fresh data for re-validation
+      const [{ wallets: freshW }, { categories: freshCatRaw }] = await Promise.all([
+        walletsApi.list(), catsApi.list(),
+      ]);
+      const fw = freshW || [];
+      const freshExp = (freshCatRaw||[]).filter(c=>c.type==="expense").map(normaliseCategory);
+      const freshInc = (freshCatRaw||[]).filter(c=>c.type==="income").map(normaliseCategory);
+      setWallets(fw); setExpCats(freshExp); setIncCats(freshInc);
+      // Re-validate all rows with fresh data
+      const validated = validateImportRows(importParsedRows, fw, freshExp, freshInc);
+      setImportRows(validated);
+      setImportErrors(validated.filter(r=>!r._valid).map(r=>`Row ${r._row}: ${r._errors.join(", ")}`));
+      setImportStep("preview");
+    } catch(err) {
+      showToast("Failed to create items: "+(err?.response?.data?.error||err.message), C.coral);
+    } finally { setImportBusy(false); }
   };
 
   const confirmImport = async () => {
@@ -2855,7 +2924,7 @@ export default function App() {
       </Modal>
 
       {/* Import / Export */}
-      <Modal open={isOpen("importExport")} onClose={()=>{closeM("importExport");setImportRows([]);setImportErrors([]);setImportStep("upload");}} title="⬆⬇ Import & Export" wide>
+      <Modal open={isOpen("importExport")} onClose={()=>{closeM("importExport");resetImport();}} title="⬆⬇ Import & Export" wide>
 
         {/* ── EXPORT SECTION ── */}
         <div style={{marginBottom:22}}>
@@ -2874,6 +2943,61 @@ export default function App() {
 
         {/* ── IMPORT SECTION ── */}
         <div style={{fontWeight:700,fontSize:14,marginBottom:12,color:C.gold}}>⬆ Import Transactions</div>
+
+        {/* ── NEW ITEMS STEP ── */}
+        {importStep === "new-items" && (
+          <>
+            <div style={{background:C.gold+"18",border:`1px solid ${C.gold}44`,borderRadius:12,padding:"12px 16px",marginBottom:16,fontSize:13,color:C.gold}}>
+              Your CSV contains accounts or categories that don't exist yet. Create them before importing?
+            </div>
+
+            {importNewWallets.length > 0 && (
+              <div style={{marginBottom:16}}>
+                <div style={{fontWeight:700,fontSize:12,color:C.teal,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>New Accounts / Wallets</div>
+                {importNewWallets.map((w,i) => (
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,background:C.navyLight,borderRadius:10,padding:"10px 14px"}}>
+                    <input type="checkbox" checked={w.selected} onChange={()=>setImportNewWallets(p=>p.map((x,j)=>j===i?{...x,selected:!x.selected}:x))} style={{accentColor:C.teal,width:16,height:16,cursor:"pointer"}}/>
+                    <span style={{flex:1,fontWeight:600,fontSize:13}}>{w.name}</span>
+                    <select value={w.type} onChange={e=>setImportNewWallets(p=>p.map((x,j)=>j===i?{...x,type:e.target.value}:x))}
+                      style={{background:C.navyMid,border:`1px solid ${C.navyLight}`,borderRadius:7,color:C.textMuted,padding:"4px 8px",fontSize:11,cursor:"pointer"}}>
+                      <option value="current">Current</option>
+                      <option value="savings">Savings</option>
+                      <option value="cash">Cash</option>
+                      <option value="digital">Digital / M-Pesa</option>
+                      <option value="investment">Investment</option>
+                    </select>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {importNewCats.length > 0 && (
+              <div style={{marginBottom:16}}>
+                <div style={{fontWeight:700,fontSize:12,color:C.blue,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>New Categories</div>
+                {importNewCats.map((c,i) => (
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,background:C.navyLight,borderRadius:10,padding:"10px 14px"}}>
+                    <input type="checkbox" checked={c.selected} onChange={()=>setImportNewCats(p=>p.map((x,j)=>j===i?{...x,selected:!x.selected}:x))} style={{accentColor:C.teal,width:16,height:16,cursor:"pointer"}}/>
+                    <span style={{flex:1,fontWeight:600,fontSize:13}}>{c.name}</span>
+                    <span style={{fontSize:11,color:c.type==="income"?C.teal:C.coral,background:(c.type==="income"?C.teal:C.coral)+"22",borderRadius:6,padding:"2px 8px",fontWeight:600}}>{c.type}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{display:"flex",gap:10}}>
+              <Btn outline color={C.textMuted} style={{flex:1}} onClick={()=>{
+                // Skip creating new items; validate as-is (some rows will be invalid)
+                const validated = validateImportRows(importParsedRows, wallets, expCats, incCats);
+                setImportRows(validated);
+                setImportErrors(validated.filter(r=>!r._valid).map(r=>`Row ${r._row}: ${r._errors.join(", ")}`));
+                setImportStep("preview");
+              }}>Skip, continue anyway</Btn>
+              <Btn style={{flex:2}} disabled={importBusy} onClick={confirmNewItems}>
+                {importBusy ? "Creating…" : `Create ${[...importNewWallets,...importNewCats].filter(x=>x.selected).length} item(s) & Continue`}
+              </Btn>
+            </div>
+          </>
+        )}
 
         {importStep === "upload" && (
           <>
@@ -2901,7 +3025,7 @@ export default function App() {
                 </div>
               )}
               <div style={{flex:1}}/>
-              <Btn onClick={()=>{setImportStep("upload");setImportRows([]);setImportErrors([]);}} outline color={C.textMuted} small>← Back</Btn>
+              <Btn onClick={resetImport} outline color={C.textMuted} small>← Back</Btn>
             </div>
 
             {/* Error log */}

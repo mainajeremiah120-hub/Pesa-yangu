@@ -1,14 +1,15 @@
 "use strict";
 require("dotenv").config();
 
-const express    = require("express");
-const helmet     = require("helmet");
-const cors       = require("cors");
-const rateLimit  = require("express-rate-limit");
-const fs         = require("fs");
-const path       = require("path");
-const logger     = require("./services/logger");
-const { pool }   = require("./models/db");
+const express     = require("express");
+const helmet      = require("helmet");
+const cors        = require("cors");
+const compression = require("compression");
+const rateLimit   = require("express-rate-limit");
+const fs          = require("fs");
+const path        = require("path");
+const logger      = require("./services/logger");
+const { pool }    = require("./models/db");
 
 async function runMigrations() {
   const client = await pool.connect();
@@ -55,6 +56,9 @@ const {
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
+// ── Compression (gzip — reduces JSON payload ~70%)
+app.use(compression());
+
 // ── Security
 app.use(helmet());
 app.set("trust proxy", 1); // Render sits behind a proxy
@@ -85,6 +89,9 @@ app.use("/api/", rateLimit({
   legacyHeaders:   false,
   message: { error: "Too many requests — please slow down." },
 }));
+
+// ── Instant ping — no DB, used by frontend to pre-warm Render on app open
+app.get("/ping", (_req, res) => res.json({ ok: true }));
 
 // ── Health check (used by Render)
 app.get("/health", async (_req, res) => {

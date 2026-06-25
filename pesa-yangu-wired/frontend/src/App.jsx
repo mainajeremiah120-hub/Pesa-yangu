@@ -785,11 +785,54 @@ export default function App() {
   // ── Display helper
   const disp = useCallback((amtKES) => fmtC(amtKES, baseCurrency, currencies), [baseCurrency, currencies]);
 
-  // ── Load all data after login
+  // ── Cache helpers — stale-while-revalidate via localStorage
+  const CACHE_KEY = user ? `py_cache_${user.id}` : null;
+  const writeCache = (data) => { try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data })); } catch {} };
+  const readCache  = () => { try { const s = localStorage.getItem(CACHE_KEY); return s ? JSON.parse(s) : null; } catch { return null; } };
+
+  const applyData = useCallback(([w, t, c, g, inv, l, r, fx]) => {
+    setWallets(w.wallets || []);
+    setTxs((t.transactions || []).map(tx => ({
+      ...tx,
+      wallet:        tx.wallet_id,
+      category:      tx.category_id,
+      amount:        parseFloat(tx.amount_kes),
+      date:          (tx.tx_date||'').slice(0,10),
+      loanId:        tx.loan_id,
+      principalPaid: tx.principal_paid ? parseFloat(tx.principal_paid) : undefined,
+      interestPaid:  tx.interest_paid  ? parseFloat(tx.interest_paid)  : undefined,
+    })));
+    const cats = c.categories || [];
+    setExpCats(cats.filter(c=>c.type==="expense").map(normaliseCategory));
+    setIncCats(cats.filter(c=>c.type==="income").map(normaliseCategory));
+    setGoals((g.goals||[]).map(normaliseGoal));
+    setInvestments((inv.investments||[]).map(normaliseInv));
+    setLoans((l.loans||[]).map(normaliseLoan));
+    setRecurring((r.recurring||[]).map(normaliseRecurring));
+    if (fx.rates) {
+      setCurrencies(prev => prev.map(c => fx.rates[c.code]
+        ? { ...c, rate: 1/fx.rates[c.code] }
+        : c
+      ));
+    }
+  }, []); // eslint-disable-line
+
+  // ── Load all data after login — shows cache instantly, then refreshes
   const loadData = useCallback(() => {
     if (!user) return;
-    setDataLoading(true);
+
+    // 1. Paint cached data immediately (makes app feel instant on revisit)
+    const cached = readCache();
+    if (cached?.data) {
+      applyData(cached.data);
+      setDataLoading(false); // show cached UI right away
+    } else {
+      setDataLoading(true);
+    }
+
     setDataError("");
+
+    // 2. Always fetch fresh data in background
     Promise.all([
       walletsApi.list(),
       txApi.list({ limit:500 }),
@@ -800,40 +843,24 @@ export default function App() {
       recurApi.list(),
       fxApi.rates(),
     ])
-    .then(([w, t, c, g, inv, l, r, fx]) => {
-      setWallets(w.wallets || []);
-      setTxs((t.transactions || []).map(tx => ({
-        ...tx,
-        wallet:       tx.wallet_id,
-        category:     tx.category_id,
-        amount:       parseFloat(tx.amount_kes),
-        date:         (tx.tx_date||'').slice(0,10),
-        loanId:       tx.loan_id,
-        principalPaid: tx.principal_paid ? parseFloat(tx.principal_paid) : undefined,
-        interestPaid:  tx.interest_paid  ? parseFloat(tx.interest_paid)  : undefined,
-      })));
-      const cats = c.categories || [];
-      setExpCats(cats.filter(c=>c.type==="expense").map(normaliseCategory));
-      setIncCats(cats.filter(c=>c.type==="income").map(normaliseCategory));
-      setGoals((g.goals||[]).map(normaliseGoal));
-      setInvestments((inv.investments||[]).map(normaliseInv));
-      setLoans((l.loans||[]).map(normaliseLoan));
-      setRecurring((r.recurring||[]).map(normaliseRecurring));
-      if (fx.rates) {
-        setCurrencies(prev => prev.map(c => fx.rates[c.code]
-          ? { ...c, rate: 1/fx.rates[c.code] }
-          : c
-        ));
-      }
+    .then((results) => {
+      applyData(results);
+      writeCache(results); // save for next visit
     })
     .catch(err => {
       console.error("Data load error:", err);
-      setDataError("Could not load your data. Please refresh.");
+      if (!cached?.data) setDataError("Could not load your data. Please refresh.");
     })
     .finally(() => setDataLoading(false));
-  }, [user]);
+  }, [user]); // eslint-disable-line
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // ── Pre-warm Render backend on app open so it's ready before login
+  useEffect(() => {
+    const base = import.meta.env.VITE_API_URL?.replace("/api/v1","") || "";
+    fetch(`${base}/ping`, { method:"GET" }).catch(()=>{});
+  }, []);
 
   // ── Field normalisers (backend snake_case → UI expectations)
   const normaliseCategory = (c) => ({

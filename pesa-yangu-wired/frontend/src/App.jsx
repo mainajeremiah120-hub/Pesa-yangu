@@ -1014,6 +1014,7 @@ export default function App() {
   const [editLoan,    setEditLoan]    = useState(null);
   const [editRepay,   setEditRepay]   = useState(null); // { loan, repayment }
   const [editRefund,  setEditRefund]  = useState(null);
+  const [catHistory,  setCatHistory]  = useState(null); // { cat, type } — category records modal
 
   // Confirm dialog
   const [confirm, setConfirm] = useState({ open:false, title:"", message:"", onConfirm:()=>{} });
@@ -2522,6 +2523,7 @@ export default function App() {
                       {c.budget>0&&<div style={{fontSize:10,color:over?C.coral:C.teal}}>{over?`+${disp(spent-c.budget)} over`:`${disp(c.budget-spent)} left`}</div>}
                     </div>
                     <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                      {(()=>{const cnt=txs.filter(t=>(t.category||t.category_id)===c.id).length;return cnt>0&&<button onClick={()=>setCatHistory({cat:c,type:"expense"})} style={{background:c.color+"22",border:`1px solid ${c.color}55`,borderRadius:6,color:c.color,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600}}>📋 {cnt} record{cnt!==1?"s":""}</button>;})()}
                       <button onClick={()=>{setFBudget({catId:c.id,catType:"expense",amount:String(c.budget||"")});openM("budget");}} style={{background:C.navyLight,border:"none",borderRadius:6,color:C.teal,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600}}>{c.budget>0?"Edit Budget":"Set Budget"}</button>
                       <button onClick={()=>toggleWatch(c.id)} style={{background:c.watch?C.gold+"22":C.navyLight,border:"none",borderRadius:6,color:c.watch?C.gold:C.textMuted,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600}}>{c.watch?"Watching":"Watch"}</button>
                       <button onClick={()=>askConfirm("Delete Category",`Delete category "${c.name}"? Existing transactions won't be affected.`,()=>deleteCategory(c.id,"expense"))} style={{background:"none",border:`1px solid ${C.coral}44`,borderRadius:6,color:C.coral,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600}}>🗑 Delete</button>
@@ -2545,6 +2547,7 @@ export default function App() {
                       </div>
                     </div>
                     <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                      {(()=>{const cnt=txs.filter(t=>(t.category||t.category_id)===c.id).length;return cnt>0&&<button onClick={()=>setCatHistory({cat:c,type:"income"})} style={{background:c.color+"22",border:`1px solid ${c.color}55`,borderRadius:6,color:c.color,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600}}>📋 {cnt} record{cnt!==1?"s":""}</button>;})()}
                       <button onClick={()=>{setFBudget({catId:c.id,catType:"income",amount:String(c.budget||"")});openM("budget");}} style={{background:C.navyLight,border:"none",borderRadius:6,color:C.teal,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600}}>{c.budget>0?"Edit":"Set Target"}</button>
                       <button onClick={()=>askConfirm("Delete Category",`Delete category "${c.name}"? Existing transactions won't be affected.`,()=>deleteCategory(c.id,"income"))} style={{background:"none",border:`1px solid ${C.coral}44`,borderRadius:6,color:C.coral,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600}}>🗑 Delete</button>
                     </div>
@@ -2870,6 +2873,45 @@ export default function App() {
         </div>
         <Btn onClick={saveWallet} style={{width:"100%",padding:13,fontSize:14}}>{editWal?"Save Changes":"Create Account"}</Btn>
       </Modal>
+
+      {/* Category History Modal */}
+      {catHistory&&(()=>{
+        const {cat,type}=catHistory;
+        const records=txs
+          .filter(t=>(t.category||t.category_id)===cat.id)
+          .sort((a,b)=>new Date(b.tx_date||b.date)-new Date(a.tx_date||a.date));
+        const total=records.reduce((s,t)=>s+(t.amount||parseFloat(t.amount_kes||0)),0);
+        const walletName=(t)=>wallets.find(w=>w.id===(t.wallet||t.wallet_id))?.name||"";
+        return(
+          <Modal open={!!catHistory} onClose={()=>setCatHistory(null)} title={`${cat.icon} ${cat.name} — Records`}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:cat.color+"18",borderRadius:10,marginBottom:14}}>
+              <div style={{fontSize:12,color:C.textMuted}}>{records.length} transaction{records.length!==1?"s":""}</div>
+              <div style={{fontFamily:"'DM Serif Display',serif",fontSize:18,color:cat.color}}>{type==="expense"?"-":""}{disp(total)}</div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:420,overflowY:"auto"}}>
+              {records.map(t=>{
+                const amt=t.amount||parseFloat(t.amount_kes||0);
+                const wn=walletName(t);
+                const ts=txTime(t);
+                return(
+                  <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:C.navyLight,borderRadius:10}}>
+                    <div style={{width:6,height:36,borderRadius:3,background:cat.color,flexShrink:0}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontWeight:600,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.merchant||t.note||cat.name}</div>
+                      <div style={{fontSize:10,color:C.textMuted,marginTop:2}}>
+                        {fmtDate(t.date||t.tx_date)}{ts?" · "+ts:""}{wn?" · "+wn:""}
+                        {t.note&&t.merchant&&<span style={{marginLeft:4,fontStyle:"italic"}}>— {t.note}</span>}
+                      </div>
+                    </div>
+                    <div style={{fontWeight:700,fontSize:14,color:type==="expense"?C.coral:C.teal,flexShrink:0}}>{type==="expense"?"-":""}{disp(amt)}</div>
+                  </div>
+                );
+              })}
+              {records.length===0&&<div style={{textAlign:"center",color:C.textMuted,fontSize:13,padding:32}}>No transactions yet</div>}
+            </div>
+          </Modal>
+        );
+      })()}
 
       {/* Add Expense Category */}
       <Modal open={isOpen("expCat")} onClose={()=>closeM("expCat")} title="🏷️ New Expense Category">

@@ -2240,6 +2240,7 @@ export default function App() {
                     <div style={{textAlign:"right"}}>
                       <div style={{fontFamily:"'DM Serif Display',serif",fontSize:20,color:w.color}}>{fmtC(bal,w.currency,currencies)}</div>
                       {baseCurrency!==w.currency&&<div style={{color:C.textFaint,fontSize:10,marginTop:1}}>≈ {disp(bal)}</div>}
+                      {w.opening_balance!=null&&<div style={{color:C.textFaint,fontSize:10,marginTop:2}}>Opening: {fmtC(parseFloat(w.opening_balance||0),w.currency,currencies)}</div>}
                       <div style={{display:"flex",gap:5,marginTop:6}}>
                         <button onClick={()=>openEditWallet(w)} style={{background:"none",border:`1px solid ${C.navyLight}`,borderRadius:6,color:C.textMuted,padding:"3px 8px",cursor:"pointer",fontSize:10}}>✏️ Edit</button>
                         <button onClick={()=>askConfirm("Delete Account",`Delete "${w.name}"? This will permanently remove the account. Deletion will be blocked if the account has any transactions, goals, investments, or loan repayments linked to it.`,()=>deleteWallet(w.id))} style={{background:"none",border:`1px solid ${C.coral}44`,borderRadius:6,color:C.coral,padding:"3px 8px",cursor:"pointer",fontSize:10}}>🗑 Delete</button>

@@ -532,7 +532,7 @@ billingRouter.get("/plans", (req,res)=>{
   res.json({
     current: req.user.plan,
     plans: {
-      free: { name:"Free",  price_kes:0,   features:["3 accounts","2 goals","2 loans","3 investments","100 transactions","CSV export/import","App sharing"] },
+      free: { name:"Free",  price_kes:0,   features:["Unlimited accounts","Unlimited goals","Unlimited loans","Unlimited investments","CSV export/import","App sharing"] },
       pro:  { name:"Pro ✦", price_kes:499, features:["Unlimited everything","Multi-currency","Reconciliation","AI advisor","Priority support"] },
     },
   });

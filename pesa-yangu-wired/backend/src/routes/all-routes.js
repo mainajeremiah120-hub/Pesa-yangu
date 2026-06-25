@@ -206,7 +206,6 @@ investmentRouter.get("/", async (req,res,next)=>{
 
 investmentRouter.post("/", async (req,res,next)=>{
   try {
-    if(req.user.plan==="free"){const {rows}=await query("SELECT COUNT(*) FROM investments WHERE user_id=$1",[req.user.id]);if(parseInt(rows[0].count)>=3) return res.status(403).json({error:"Free plan allows 3 investments.",code:"PLAN_LIMIT"});}
     const d=z.object({wallet_id:z.string().uuid(),name:z.string().min(1),ticker:z.string().optional(),type:z.string().default("Stock"),currency:z.string().length(3).default("KES"),units:z.number().positive(),buy_price_kes:z.number().positive(),current_price_kes:z.number().positive().optional()}).parse(req.body);
     const {rows}=await query("INSERT INTO investments (user_id,wallet_id,name,ticker,type,currency,units,buy_price_kes,current_price_kes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *",
       [req.user.id,d.wallet_id,d.name,d.ticker||null,d.type,d.currency,d.units,d.buy_price_kes,d.current_price_kes||d.buy_price_kes]);
@@ -308,7 +307,6 @@ loanRouter.get("/", async (req,res,next)=>{
 
 loanRouter.post("/", async (req,res,next)=>{
   try {
-    if(req.user.plan==="free"){const {rows}=await query("SELECT COUNT(*) FROM loans WHERE user_id=$1",[req.user.id]);if(parseInt(rows[0].count)>=2) return res.status(403).json({error:"Free plan allows 2 loans.",code:"PLAN_LIMIT"});}
     const d=z.object({
       name:z.string().min(1), lender:z.string().optional(), currency:z.string().length(3).default("KES"),
       principal_kes:z.number().positive(), remaining_kes:z.number().min(0).optional(),

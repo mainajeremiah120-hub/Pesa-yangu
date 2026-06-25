@@ -11,7 +11,18 @@ const { query, withTransaction } = require("../models/db");
 const { requirePro } = require("../middleware/auth");
 const { getRates }   = require("../services/fx");
 const logger = require("../services/logger");
-const upload = multer({ storage: multer.memoryStorage(), limits:{ fileSize:20*1024*1024 } });
+// 5 MB cap — CSV files never need more; protects against DoS via large uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ["text/csv", "text/plain", "application/vnd.ms-excel", "application/octet-stream"];
+    if (!allowed.includes(file.mimetype) && !file.originalname.toLowerCase().endsWith(".csv")) {
+      return cb(Object.assign(new Error("Only CSV files are allowed"), { status: 400 }));
+    }
+    cb(null, true);
+  },
+});
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CATEGORIES
@@ -24,7 +35,7 @@ categoryRouter.get("/", async (req,res,next)=>{
 
 categoryRouter.post("/", async (req,res,next)=>{
   try {
-    const d=z.object({name:z.string().min(1),type:z.enum(["expense","income"]),icon:z.string().default("🏷️"),color:z.string().default("#4A90E2"),budget_kes:z.number().min(0).default(0),watch:z.boolean().default(false)}).parse(req.body);
+    const d=z.object({name:z.string().min(1).max(60).trim(),type:z.enum(["expense","income"]),icon:z.string().max(10).default("🏷️"),color:z.string().max(20).default("#4A90E2"),budget_kes:z.number().min(0).max(1e9).default(0),watch:z.boolean().default(false)}).parse(req.body);
     const {rows}=await query(
       `INSERT INTO categories (user_id,name,type,icon,color,budget_kes,watch) VALUES ($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT (user_id,name,type) DO UPDATE SET icon=$4,color=$5,budget_kes=$6,watch=$7 RETURNING *`,
@@ -100,12 +111,12 @@ goalRouter.post("/", async (req,res,next)=>{
   try {
     const d=z.object({
       wallet_id:  z.string().uuid().optional(),
-      name:       z.string().min(1),
-      icon:       z.string().default("🎯"),
-      color:      z.string().default("#00D4AA"),
-      target_kes: z.number().positive(),
-      saved_kes:  z.number().min(0).default(0),
-      deadline:   z.string().optional(),
+      name:       z.string().min(1).max(100).trim(),
+      icon:       z.string().max(10).default("🎯"),
+      color:      z.string().max(20).default("#00D4AA"),
+      target_kes: z.number().positive().max(1e9),
+      saved_kes:  z.number().min(0).max(1e9).default(0),
+      deadline:   z.string().max(20).optional(),
     }).parse(req.body);
     const goal = await withTransaction(async(client)=>{
       // Deduct opening balance from wallet if provided
@@ -206,7 +217,7 @@ investmentRouter.get("/", async (req,res,next)=>{
 
 investmentRouter.post("/", async (req,res,next)=>{
   try {
-    const d=z.object({wallet_id:z.string().uuid(),name:z.string().min(1),ticker:z.string().optional(),type:z.string().default("Stock"),currency:z.string().length(3).default("KES"),units:z.number().positive(),buy_price_kes:z.number().positive(),current_price_kes:z.number().positive().optional()}).parse(req.body);
+    const d=z.object({wallet_id:z.string().uuid(),name:z.string().min(1).max(100).trim(),ticker:z.string().max(20).optional(),type:z.string().max(50).default("Stock"),currency:z.string().length(3).default("KES"),units:z.number().positive().max(1e9),buy_price_kes:z.number().positive().max(1e12),current_price_kes:z.number().positive().max(1e12).optional()}).parse(req.body);
     const {rows}=await query("INSERT INTO investments (user_id,wallet_id,name,ticker,type,currency,units,buy_price_kes,current_price_kes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *",
       [req.user.id,d.wallet_id,d.name,d.ticker||null,d.type,d.currency,d.units,d.buy_price_kes,d.current_price_kes||d.buy_price_kes]);
     res.status(201).json({investment:{...rows[0],returns:[]}});
@@ -308,11 +319,11 @@ loanRouter.get("/", async (req,res,next)=>{
 loanRouter.post("/", async (req,res,next)=>{
   try {
     const d=z.object({
-      name:z.string().min(1), lender:z.string().optional(), currency:z.string().length(3).default("KES"),
-      principal_kes:z.number().positive(), remaining_kes:z.number().min(0).optional(),
-      interest_rate:z.number().min(0).default(0),
+      name:z.string().min(1).max(100).trim(), lender:z.string().max(100).optional(), currency:z.string().length(3).default("KES"),
+      principal_kes:z.number().positive().max(1e12), remaining_kes:z.number().min(0).max(1e12).optional(),
+      interest_rate:z.number().min(0).max(100).default(0),
       interest_type:z.enum(["simple","compound"]).default("compound"),
-      monthly_payment_kes:z.number().min(0).default(0), next_due_date:z.string().optional(), note:z.string().optional(),
+      monthly_payment_kes:z.number().min(0).max(1e12).default(0), next_due_date:z.string().max(20).optional(), note:z.string().max(500).optional(),
     }).parse(req.body);
     // Simple interest: fix total = principal × (1 + rate/100) at creation time
     const defaultRemaining = d.interest_type === "simple"
@@ -502,20 +513,32 @@ fxRouter.get("/", async (req,res,next)=>{
 const aiRouter  = express.Router();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+const aiContextSchema = z.object({
+  baseCurrency:   z.string().length(3).default("KES"),
+  totalBalance:   z.number().optional(),
+  totalIncome:    z.number().optional(),
+  totalExpenses:  z.number().optional(),
+  topCategories:  z.array(z.object({ name:z.string().max(60), spent:z.number(), budget:z.number() })).max(20).optional(),
+  goals:          z.array(z.object({ name:z.string().max(100), saved:z.number(), target:z.number() })).max(20).optional(),
+  loans:          z.array(z.object({ name:z.string().max(100), remaining:z.number(), rate:z.number() })).max(20).optional(),
+  watchedAlerts:  z.array(z.string().max(60)).max(10).optional(),
+});
+
 aiRouter.post("/advice", async (req,res,next)=>{
   try {
     if(!process.env.ANTHROPIC_API_KEY){
       return res.status(503).json({error:"AI advisor is not configured. Please contact support."});
     }
-    const {context}=req.body;
-    if(!context) return res.status(400).json({error:"context required"});
-    const client=new Anthropic({apiKey:process.env.ANTHROPIC_API_KEY});
-    const msg=await client.messages.create({
+    // Validate and sanitize context — reject arbitrary keys/values
+    const context = aiContextSchema.parse(req.body.context ?? req.body);
+    const aiClient = new Anthropic({apiKey:process.env.ANTHROPIC_API_KEY});
+    const msg=await aiClient.messages.create({
       model:"claude-haiku-4-5-20251001", max_tokens:1000,
-      messages:[{role:"user",content:`You are a sharp, warm personal finance advisor for a user in Kenya managing finances in ${context.baseCurrency||"KES"}. Based on their data below, give 5 specific, numbered, actionable insights covering: spending vs budget, watched categories, goals progress, loan strategy, and one forward-looking prediction. Be direct and data-led. Data: ${JSON.stringify(context)}`}],
+      messages:[{role:"user",content:`You are a sharp, warm personal finance advisor for a user in Kenya managing finances in ${context.baseCurrency}. Based on their data below, give 5 specific, numbered, actionable insights covering: spending vs budget, watched categories, goals progress, loan strategy, and one forward-looking prediction. Be direct and data-led. Data: ${JSON.stringify(context)}`}],
     });
     res.json({advice:msg.content[0]?.text||""});
   } catch(e){
+    if(e instanceof z.ZodError) return res.status(400).json({error:"Invalid context: "+e.errors[0].message});
     if(e?.status===401||e?.message?.includes("apiKey")||e?.message?.includes("authentication")){
       return res.status(503).json({error:"AI advisor is not configured correctly. Check the API key."});
     }

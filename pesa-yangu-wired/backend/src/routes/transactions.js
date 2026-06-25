@@ -4,7 +4,16 @@ const multer  = require("multer");
 const { z }   = require("zod");
 const { query, withTransaction } = require("../models/db");
 const router  = express.Router();
-const upload  = multer({ storage: multer.memoryStorage(), limits:{ fileSize:10*1024*1024 } });
+const upload  = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ["text/csv","text/plain","application/vnd.ms-excel","application/octet-stream"];
+    if (!allowed.includes(file.mimetype) && !file.originalname.toLowerCase().endsWith(".csv"))
+      return cb(Object.assign(new Error("Only CSV files are allowed"), { status: 400 }));
+    cb(null, true);
+  },
+});
 
 router.get("/", async (req, res, next) => {
   try {
@@ -29,9 +38,11 @@ router.post("/", async (req, res, next) => {
     const d = z.object({
       wallet_id:z.string().uuid(), category_id:z.string().uuid().optional(),
       type:z.enum(["expense","income","transfer_in","transfer_out"]),
-      amount_kes:z.number().positive(), merchant:z.string().optional(), note:z.string().optional(),
-      tx_date:z.string().optional(), loan_id:z.string().uuid().optional(),
-      principal_paid:z.number().optional(), interest_paid:z.number().optional(),
+      amount_kes:z.number().positive().max(1e10),
+      merchant:z.string().max(200).optional(),
+      note:z.string().max(1000).optional(),
+      tx_date:z.string().max(30).optional(), loan_id:z.string().uuid().optional(),
+      principal_paid:z.number().max(1e10).optional(), interest_paid:z.number().max(1e10).optional(),
       transfer_pair_id:z.string().uuid().optional(),
     }).parse(req.body);
 
@@ -144,8 +155,14 @@ router.get("/export", async (req, res, next) => {
 router.post("/import", upload.single("file"), async (req, res, next) => {
   try {
     if(!req.file) return res.status(400).json({error:"No file uploaded"});
-    const lines=req.file.buffer.toString("utf-8").trim().split("\n").filter(l=>l.trim());
+    // Reject non-CSV by MIME type and extension
+    const allowed=["text/csv","text/plain","application/vnd.ms-excel","application/octet-stream"];
+    if(!allowed.includes(req.file.mimetype)&&!req.file.originalname.toLowerCase().endsWith(".csv"))
+      return res.status(400).json({error:"Only CSV files are accepted"});
+    const raw=req.file.buffer.toString("utf-8").replace(/\r/g,"");
+    const lines=raw.trim().split("\n").filter(l=>l.trim());
     if(lines.length<2) return res.status(400).json({error:"File appears empty"});
+    if(lines.length>5001) return res.status(400).json({error:"File too large — maximum 5000 rows per import"});
     const hdrs=lines[0].split(",").map(h=>h.trim().toLowerCase().replace(/["']/g,""));
     const idx=(n)=>hdrs.indexOf(n);
     const {rows:cats}=await query("SELECT id,name,type FROM categories WHERE user_id=$1",[req.user.id]);

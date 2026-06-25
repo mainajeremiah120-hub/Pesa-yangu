@@ -48,9 +48,9 @@ const hashTok     = (t)  => crypto.createHash("sha256").update(t).digest("hex");
 router.post("/register", async (req, res, next) => {
   try {
     const { email, password, full_name } = z.object({
-      email:     z.string().email(),
-      password:  z.string().min(8, "Password must be at least 8 characters"),
-      full_name: z.string().min(1).max(100),
+      email:     z.string().email().max(254),
+      password:  z.string().min(8, "Password must be at least 8 characters").max(128),
+      full_name: z.string().min(1).max(100).trim(),
     }).parse(req.body);
 
     const existing = await query("SELECT id FROM users WHERE email=$1", [email.toLowerCase()]);
@@ -89,8 +89,8 @@ router.post("/register", async (req, res, next) => {
 router.post("/login", async (req, res, next) => {
   try {
     const { email, password } = z.object({
-      email:    z.string().email(),
-      password: z.string().min(1),
+      email:    z.string().email().max(254),
+      password: z.string().min(1).max(128),
     }).parse(req.body);
 
     const { rows } = await query(
@@ -197,45 +197,56 @@ router.post("/forgot-password", async (req, res, next) => {
     if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
       return res.status(503).json({ error: "Email service is not configured yet. Please contact support." });
     }
-    const { email } = z.object({ email: z.string().email() }).parse(req.body);
+    const { email } = z.object({ email: z.string().email().max(254) }).parse(req.body);
+    const emailLower = email.toLowerCase();
+
     // Always respond 200 to prevent email enumeration
-    const { rows } = await query(
-      "SELECT id FROM users WHERE email=$1",
-      [email.toLowerCase()]
-    );
+    const { rows } = await query("SELECT id FROM users WHERE email=$1", [emailLower]);
     if (!rows.length) return res.json({ ok: true });
 
-    // Invalidate any existing unused tokens for this user
-    await query(
-      "DELETE FROM password_reset_tokens WHERE user_id=$1 AND used_at IS NULL",
-      [rows[0].id]
+    const userId = rows[0].id;
+
+    // Per-email rate limit: max 3 reset requests per hour
+    const { rows: recentResets } = await query(
+      `SELECT COUNT(*) FROM password_reset_tokens
+       WHERE user_id=$1 AND created_at > NOW() - INTERVAL '1 hour'`,
+      [userId]
     );
+    if (parseInt(recentResets[0].count) >= 3) {
+      // Still return 200 to prevent enumeration
+      return res.json({ ok: true });
+    }
+
+    // Clean up expired tokens to keep the table tidy
+    await query("DELETE FROM password_reset_tokens WHERE expires_at < NOW()", []);
+
+    // Invalidate any existing unused tokens for this user
+    await query("DELETE FROM password_reset_tokens WHERE user_id=$1 AND used_at IS NULL", [userId]);
 
     const token     = crypto.randomBytes(32).toString("hex");
     const tokenHash = hashTok(token);
     await query(
       `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
        VALUES ($1, $2, NOW() + INTERVAL '1 hour')`,
-      [rows[0].id, tokenHash]
+      [userId, tokenHash]
     );
 
     const frontendUrl = process.env.FRONTEND_URL || "https://pesayangu.africa";
     const resetUrl    = `${frontendUrl}?reset=${token}`;
     try {
-      await sendResetEmail(email.toLowerCase(), resetUrl);
+      await sendResetEmail(emailLower, resetUrl);
     } catch (mailErr) {
       logger.error({ msg: "Failed to send reset email", error: mailErr.message });
       return res.status(503).json({ error: "Could not send reset email. Check your SMTP settings." });
     }
 
-    logger.info({ msg: "Password reset requested", userId: rows[0].id });
+    logger.info({ msg: "Password reset requested", userId });
     res.json({ ok: true });
   } catch (err) {
     if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
-    // Table not found — migration hasn't run yet
     if (err.code === "42P01") return res.status(503).json({ error: "Database not ready. Please try again in a moment." });
     logger.error({ msg: "forgot-password error", detail: err.message, code: err.code });
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: "Something went wrong. Please try again." });
   }
 });
 

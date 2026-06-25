@@ -19,7 +19,7 @@ router.get("/", async (req, res, next) => {
 
 router.post("/", async (req, res, next) => {
   try {
-    const d = z.object({ name:z.string().min(1), account_type:z.string().default("current"), currency:z.string().length(3).default("KES"), balance:z.number().default(0), opening_balance:z.number().optional(), color:z.string().default("#00D4AA"), icon:z.string().default("🏦") }).parse(req.body);
+    const d = z.object({ name:z.string().min(1).max(100).trim(), account_type:z.string().max(30).default("current"), currency:z.string().length(3).default("KES"), balance:z.number().min(-1e12).max(1e12).default(0), opening_balance:z.number().min(-1e12).max(1e12).optional(), color:z.string().max(20).default("#00D4AA"), icon:z.string().max(10).default("🏦") }).parse(req.body);
     const openingBal = d.opening_balance ?? d.balance;
     const {rows} = await query(
       "INSERT INTO wallets (user_id,name,account_type,currency,balance,opening_balance,color,icon) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",

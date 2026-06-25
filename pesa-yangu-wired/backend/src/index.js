@@ -56,48 +56,94 @@ const {
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
-// ── Compression (gzip — reduces JSON payload ~70%)
+// ── Compression (gzip)
 app.use(compression());
 
-// ── Security
-app.use(helmet());
-app.set("trust proxy", 1); // Render sits behind a proxy
+// ── Security headers (hardened helmet)
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:  ["'self'"],
+      scriptSrc:   ["'self'"],
+      styleSrc:    ["'self'", "'unsafe-inline'"],
+      imgSrc:      ["'self'", "data:", "https:"],
+      connectSrc:  ["'self'"],
+      fontSrc:     ["'self'", "https://fonts.gstatic.com"],
+      objectSrc:   ["'none'"],
+      frameAncestors: ["'none'"],        // clickjacking protection
+    },
+  },
+  hsts: {
+    maxAge:            31536000,         // 1 year
+    includeSubDomains: true,
+    preload:           true,
+  },
+  frameguard:        { action: "deny" }, // X-Frame-Options: DENY
+  noSniff:           true,               // X-Content-Type-Options: nosniff
+  xssFilter:         true,
+  referrerPolicy:    { policy: "strict-origin-when-cross-origin" },
+}));
+app.set("trust proxy", 1);
 
-// ── CORS
+// ── CORS — explicit allowlist only, no .vercel.app wildcard
 const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173")
   .split(",").map(o => o.trim());
 
+// Accept specific Vercel preview URLs from env, not a blanket wildcard
+const allowedVercelDomains = (process.env.ALLOWED_VERCEL_DOMAINS || "")
+  .split(",").map(o => o.trim()).filter(Boolean);
+
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true);                     // server-to-server
-    if (origin.endsWith(".vercel.app")) return cb(null, true); // Vercel previews
+    if (!origin) return cb(null, true);   // server-to-server / curl
     if (allowedOrigins.includes(origin)) return cb(null, true);
+    if (allowedVercelDomains.some(d => origin === d || origin.endsWith(`.${d}`))) return cb(null, true);
+    logger.warn({ msg: "CORS blocked", origin });
     cb(new Error(`CORS: ${origin} not allowed`));
   },
   credentials: true,
 }));
 
-// ── Body parsing
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
+// ── Body parsing — keep small; financial JSON never needs 10 MB
+app.use(express.json({ limit: "512kb" }));
+app.use(express.urlencoded({ extended: true, limit: "512kb" }));
 
-// ── Rate limiting
-app.use("/api/", rateLimit({
+// ── Global rate limit (all API routes)
+const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max:      parseInt(process.env.RATE_LIMIT_MAX || "200"),
+  max:      parseInt(process.env.RATE_LIMIT_MAX || "300"),
   standardHeaders: true,
   legacyHeaders:   false,
   message: { error: "Too many requests — please slow down." },
-}));
+});
 
-// ── Instant ping — no DB, used by frontend to pre-warm Render on app open
+// ── Strict rate limits on auth endpoints (brute-force protection)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,   // 15 min window
+  max:      20,                 // max 20 attempts per IP
+  standardHeaders: true,
+  legacyHeaders:   false,
+  message: { error: "Too many attempts — please wait 15 minutes." },
+});
+
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,   // 1 hour window
+  max:      5,                  // max 5 reset requests per IP per hour
+  standardHeaders: true,
+  legacyHeaders:   false,
+  message: { error: "Too many password reset requests — please wait an hour." },
+});
+
+app.use("/api/", globalLimiter);
+
+// ── Instant ping — no DB, pre-warms Render before login
 app.get("/ping", (_req, res) => res.json({ ok: true }));
 
 // ── Health check (used by Render)
 app.get("/health", async (_req, res) => {
   try {
     await pool.query("SELECT 1");
-    res.json({ status: "ok", ts: new Date().toISOString(), build: "f8897cb" });
+    res.json({ status: "ok", ts: new Date().toISOString() });
   } catch {
     res.status(503).json({ status: "degraded", error: "DB unreachable" });
   }
@@ -105,7 +151,13 @@ app.get("/health", async (_req, res) => {
 
 // ── API v1
 const v1 = express.Router();
+
+// Auth routes with stricter per-endpoint limiters
+v1.use("/auth/login",           authLimiter);
+v1.use("/auth/register",        authLimiter);
+v1.use("/auth/forgot-password", forgotPasswordLimiter);
 v1.use("/auth",        authRoutes);
+
 v1.use("/admin",       requireAuth, requireAdmin, adminRoutes);
 v1.use("/tickets",     requireAuth, ticketRoutes);
 v1.use("/fx-rates",    fxRoutes);
@@ -127,14 +179,15 @@ app.use("/api/v1", v1);
 // ── 404
 app.use((_req, res) => res.status(404).json({ error: "Not found" }));
 
-// ── Global error handler
+// ── Global error handler — never leak internals in production
 app.use((err, _req, res, _next) => {
-  logger.error({ msg: err.message, stack: err.stack });
   const status = err.status || err.statusCode || 500;
+  logger.error({ msg: err.message, status, stack: err.stack });
+  // Only expose message for client errors (4xx); always hide 5xx internals
   res.status(status).json({
-    error: process.env.NODE_ENV === "production" && status === 500
-      ? "Internal server error"
-      : err.message,
+    error: status < 500
+      ? err.message
+      : "Something went wrong. Please try again.",
   });
 });
 

@@ -1981,6 +1981,10 @@ export default function App() {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // RENDER GATES
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Password reset link must always show reset form — even if user has an active session
+  if (new URLSearchParams(window.location.search).get('reset'))
+    return <AuthPage onLogin={login} onRegister={register}/>;
+
   if (authLoading) return <ThemeCtx.Provider value={C}><LoadingScreen message="Starting Pesa Yanguâ€¦"/></ThemeCtx.Provider>;
   if (!user)       return <AuthPage onLogin={login} onRegister={register}/>;
   if (user.role === "admin") return <AdminApp user={user} logout={logout} C={C} theme={theme} toggleTheme={toggleTheme}/>;

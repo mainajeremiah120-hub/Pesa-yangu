@@ -19,10 +19,11 @@ router.get("/", async (req, res, next) => {
 
 router.post("/", async (req, res, next) => {
   try {
-    const d = z.object({ name:z.string().min(1), account_type:z.string().default("current"), currency:z.string().length(3).default("KES"), balance:z.number().default(0), color:z.string().default("#00D4AA"), icon:z.string().default("🏦") }).parse(req.body);
+    const d = z.object({ name:z.string().min(1), account_type:z.string().default("current"), currency:z.string().length(3).default("KES"), balance:z.number().default(0), opening_balance:z.number().optional(), color:z.string().default("#00D4AA"), icon:z.string().default("🏦") }).parse(req.body);
+    const openingBal = d.opening_balance ?? d.balance;
     const {rows} = await query(
-      "INSERT INTO wallets (user_id,name,account_type,currency,balance,color,icon) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
-      [req.user.id,d.name,d.account_type,d.currency,d.balance,d.color,d.icon]
+      "INSERT INTO wallets (user_id,name,account_type,currency,balance,opening_balance,color,icon) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
+      [req.user.id,d.name,d.account_type,d.currency,d.balance,openingBal,d.color,d.icon]
     );
     res.status(201).json({wallet:rows[0]});
   } catch(e){if(e instanceof z.ZodError) return res.status(400).json({error:e.errors[0].message}); next(e);}
@@ -30,10 +31,11 @@ router.post("/", async (req, res, next) => {
 
 router.patch("/:id", async (req, res, next) => {
   try {
-    const allowed = ["name","color","icon","sort_order","is_archived","account_type","currency","balance"];
+    const allowed = ["name","color","icon","sort_order","is_archived","account_type","currency","balance","opening_balance"];
     const updates = Object.fromEntries(Object.entries(req.body).filter(([k]) => allowed.includes(k)));
     if (!Object.keys(updates).length) return res.status(400).json({ error: "No valid fields" });
     if (updates.balance !== undefined) updates.balance = parseFloat(updates.balance);
+    if (updates.opening_balance !== undefined) updates.opening_balance = parseFloat(updates.opening_balance);
     const sets = Object.keys(updates).map((k, i) => `${k}=$${i + 3}`);
     const { rows } = await query(
       `UPDATE wallets SET ${sets.join(",")} WHERE id=$1 AND user_id=$2 RETURNING *`,

@@ -961,7 +961,7 @@ export default function App() {
   // ─────────────────────────────────────────────────────────────────────────
   const blankTx    = { type:"expense", category:"", amount:"", wallet:"", note:"", merchant:"", isRecurring:false, freq:"monthly" };
   const blankXfer  = { from:"", to:"", amount:"", note:"" };
-  const blankWal   = { name:"", accountType:"current", currency:"KES", icon:"🏦", color:C.teal, openingBalance:"" };
+  const blankWal   = { name:"", accountType:"current", currency:"KES", icon:"🏦", color:C.teal, openingBalance:"", currentBalance:"" };
   const blankExpCat= { name:"", icon:"🏷️", color:C.blue, budget:"", watch:false };
   const blankIncCat= { name:"", icon:"💵", color:C.teal, budget:"" };
   const blankBudget= { catId:"", catType:"expense", amount:"" };
@@ -1084,7 +1084,7 @@ export default function App() {
       const bal = toKES(parseFloat(fWal.openingBalance)||0, fWal.currency, currencies);
       const { wallet } = await walletsApi.create({
         name:fWal.name, account_type:fWal.accountType,
-        currency:fWal.currency, balance:bal,
+        currency:fWal.currency, balance:bal, opening_balance:bal,
         color:fWal.color, icon:fWal.icon,
       });
       setWallets(p=>[...p, wallet]);
@@ -1280,7 +1280,8 @@ export default function App() {
       currency:       w.currency || "KES",
       icon:           w.icon || "🏦",
       color:          w.color || C.teal,
-      openingBalance: String(parseFloat(w.balance || 0)),
+      openingBalance: String(parseFloat(w.opening_balance ?? w.balance ?? 0)),
+      currentBalance: String(parseFloat(w.balance ?? 0)),
     });
     openM("wallet");
   };
@@ -1384,14 +1385,16 @@ export default function App() {
     if (!fWal.name) return;
     if (editWal) {
       try {
-        const bal = toKES(parseFloat(fWal.openingBalance) || 0, fWal.currency, currencies);
+        const curBal = toKES(parseFloat(fWal.currentBalance) || 0, fWal.currency, currencies);
+        const openBal = toKES(parseFloat(fWal.openingBalance) || 0, fWal.currency, currencies);
         const { wallet } = await walletsApi.update(editWal.id, {
-          name:         fWal.name,
-          account_type: fWal.accountType,
-          currency:     fWal.currency,
-          balance:      bal,
-          color:        fWal.color,
-          icon:         fWal.icon,
+          name:            fWal.name,
+          account_type:    fWal.accountType,
+          currency:        fWal.currency,
+          balance:         curBal,
+          opening_balance: openBal,
+          color:           fWal.color,
+          icon:            fWal.icon,
         });
         setWallets(p => p.map(w => w.id === editWal.id ? wallet : w));
         setEditWal(null); setFWal(blankWal); closeM("wallet");
@@ -2775,7 +2778,8 @@ export default function App() {
         <Field label="Account Name" value={fWal.name} onChange={v=>setFWal({...fWal,name:v})} placeholder="e.g. Equity Bank Current"/>
         <Field label="Account Type" value={fWal.accountType} onChange={v=>setFWal({...fWal,accountType:v})} options={[{value:"current",label:"🏦 Current / Checking"},{value:"savings",label:"💰 Savings Account"},{value:"investment",label:"📈 Investment Account"},{value:"cash",label:"👛 Cash Wallet"},{value:"digital",label:"📱 Mobile Money"}]}/>
         <Field label="Currency" value={fWal.currency} onChange={v=>setFWal({...fWal,currency:v})} options={currencies.map(c=>({value:c.code,label:`${c.code} – ${c.name} (${c.symbol})`}))}/>
-        <Field label={editWal?`Current Balance (${fWal.currency})`:`Opening Balance (${fWal.currency})`} type="number" value={fWal.openingBalance} onChange={v=>setFWal({...fWal,openingBalance:v})} placeholder="0.00"/>
+        <Field label={`Opening Balance (${fWal.currency})`} type="number" value={fWal.openingBalance} onChange={v=>setFWal({...fWal,openingBalance:v})} placeholder="0.00"/>
+        {editWal&&<Field label={`Current Balance (${fWal.currency})`} type="number" value={fWal.currentBalance} onChange={v=>setFWal({...fWal,currentBalance:v})} placeholder="0.00"/>}
         <div className="grid-2">
           <Field label="Icon"   value={fWal.icon}  onChange={v=>setFWal({...fWal,icon:v})}  options={ICONS.map(i=>({value:i,label:i}))}/>
           <ColorPicker label="Colour" value={fWal.color} onChange={v=>setFWal({...fWal,color:v})} colors={CAT_COLORS}/>

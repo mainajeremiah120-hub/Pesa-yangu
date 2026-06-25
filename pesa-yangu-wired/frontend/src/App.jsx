@@ -71,6 +71,13 @@ const fmtC = (amtKES, dispCode, currencies, compact=false) => {
 const fmtPct = (n) => `${n>=0?"+":""}${n.toFixed(1)}%`;
 const todayStr  = () => new Date().toISOString().slice(0,10);
 const nowTimeStr = () => { const d = new Date(); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); };
+const txTime = (tx) => {
+  const ts = tx.tx_date;
+  if (!ts || !String(ts).includes("T")) return "";
+  const d = new Date(ts); if (isNaN(d)) return "";
+  const h = d.getHours(), m = d.getMinutes();
+  return (h === 0 && m === 0) ? "" : String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
+};
 const _MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const fmtDate = (d) => {
   if (!d) return "—";
@@ -2211,7 +2218,7 @@ export default function App() {
                   <div style={{width:34,height:34,borderRadius:9,background:(cat?.color||C.blue)+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>{cat?.icon||"💸"}</div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.merchant||t.note||"Transaction"}</div>
-                    <div style={{fontSize:10,color:C.textMuted}}>{cat?.name||"—"} · {w?.name||"—"} · {fmtDate(t.date||t.tx_date)}</div>
+                    <div style={{fontSize:10,color:C.textMuted}}>{cat?.name||"—"} · {w?.name||"—"} · {fmtDate(t.date||t.tx_date)}{txTime(t)?" · "+txTime(t):""}</div>
                   </div>
                   <div style={{textAlign:"right",flexShrink:0}}>
                     <div style={{fontSize:12,fontWeight:700,color:isIn?C.teal:C.textPrimary}}>{isIn?"+":"−"}{disp(t.amount||parseFloat(t.amount_kes||0))}</div>
@@ -2393,7 +2400,7 @@ export default function App() {
                     <div style={{color:C.textMuted,fontSize:10,marginTop:2,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
                       <span>{highlight(cat?.name||"—")}</span><span>·</span>
                       <span>{highlight(w?.name||"—")}</span><span>·</span>
-                      <span>{fmtDate(t.date||t.tx_date)}</span>
+                      <span>{fmtDate(t.date||t.tx_date)}{txTime(t)?" · "+txTime(t):""}</span>
                       {t.loanId&&<Badge color={C.coral}>Loan</Badge>}
                       {t.recurring&&<Badge color={C.purple}>🔁</Badge>}}
                       {isRefund&&origTx&&<span style={{color:"#9B59B6"}}>↩ {origTx.merchant||origTx.note||"expense"}</span>}

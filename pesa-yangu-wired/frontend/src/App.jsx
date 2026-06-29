@@ -822,16 +822,39 @@ export default function App() {
   const [dataError,   setDataError]   = useState("");
 
   // ── UI state
-  const [tab,    _setTab]   = useState("dashboard");
+  const [tab,    _setTab]   = useState(() => {
+    // Restore tab from URL hash on first load
+    const hash = window.location.hash.replace("#","");
+    const valid = ["dashboard","accounts","transactions","budgets","goals","recurring","investments","loans","insurance","reconcile","settings","more","admin"];
+    return valid.includes(hash) ? hash : "dashboard";
+  });
+
   const setTab = (newTab) => {
     _setTab(newTab);
     if (newTab !== "transactions") { setTxSearch(""); setTxWalletFilter(""); }
+    window.history.pushState({ tab: newTab }, "", "#" + newTab);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  // Browser back/forward button support
+  useEffect(() => {
+    const onPop = (e) => {
+      const t = e.state?.tab || "dashboard";
+      _setTab(t);
+      if (t !== "transactions") { setTxSearch(""); setTxWalletFilter(""); }
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+    // Seed the initial history entry so back can return to it
+    window.history.replaceState({ tab }, "", "#" + tab);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []); // eslint-disable-line
+
   const goToWalletTxs = (walletId) => {
     setTxWalletFilter(walletId);
     setTxSearch("");
     _setTab("transactions");
+    window.history.pushState({ tab: "transactions" }, "", "#transactions");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const [modals, setModals] = useState({});
@@ -987,6 +1010,46 @@ export default function App() {
 
     subscribePush();
   }, [user?.id]); // eslint-disable-line
+
+  // ── Capture PWA install prompt (Android/Chrome) — must happen early
+  const [installPrompt,   setInstallPrompt]   = useState(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [showInstallModal,  setShowInstallModal]  = useState(false);
+
+  useEffect(() => {
+    // Don't show if already running as installed PWA
+    if (window.matchMedia("(display-mode: standalone)").matches) return;
+    // Don't show if user already dismissed it
+    if (localStorage.getItem("py_install_dismissed")) return;
+    const handler = (e) => { e.preventDefault(); setInstallPrompt(e); setShowInstallBanner(true); };
+    window.addEventListener("beforeinstallprompt", handler);
+    // iOS/Desktop — no beforeinstallprompt, show manual instructions instead
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const isMobile = /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+    if ((isIOS || isMobile) && !localStorage.getItem("py_install_dismissed")) {
+      setShowInstallBanner(true);
+    }
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  const dismissInstallBanner = () => {
+    localStorage.setItem("py_install_dismissed", "1");
+    setShowInstallBanner(false);
+  };
+
+  const triggerInstall = async () => {
+    if (installPrompt) {
+      installPrompt.prompt();
+      const { outcome } = await installPrompt.userChoice;
+      if (outcome === "accepted") {
+        localStorage.setItem("py_install_dismissed", "1");
+        setShowInstallBanner(false);
+        setInstallPrompt(null);
+      }
+    } else {
+      setShowInstallModal(true);
+    }
+  };
 
   // ── Pre-warm Render backend on app open so it's ready before login
   useEffect(() => {
@@ -2393,6 +2456,23 @@ export default function App() {
         {/* DASHBOARD  */}
         {tab==="dashboard"&&(
           <div style={{display:"flex",flexDirection:"column",gap:16}}>
+
+            {/* ── Install App Banner (one-time, dismisses forever) ── */}
+            {showInstallBanner&&(
+              <div style={{background:"linear-gradient(135deg,#0D2137,#0A2744)",border:`1px solid ${C.teal}44`,borderRadius:16,padding:"16px 18px",display:"flex",alignItems:"center",gap:14,position:"relative",overflow:"hidden"}}>
+                <div style={{position:"absolute",right:-20,top:-20,fontSize:80,opacity:0.07,pointerEvents:"none"}}>📱</div>
+                <div style={{width:46,height:46,background:`linear-gradient(135deg,${C.teal},${C.blue})`,borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>📲</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:14,color:C.textPrimary,marginBottom:3}}>Get the Pesa Yangu App</div>
+                  <div style={{fontSize:12,color:C.textMuted,lineHeight:1.4}}>Install on your phone for faster access, offline support &amp; daily reminders — no app store needed.</div>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
+                  <button onClick={triggerInstall} style={{background:C.teal,border:"none",borderRadius:10,color:C.navy,fontWeight:700,fontSize:12,padding:"8px 14px",cursor:"pointer",whiteSpace:"nowrap"}}>Install App</button>
+                  <button onClick={dismissInstallBanner} style={{background:"none",border:"none",color:C.textMuted,fontSize:11,cursor:"pointer",padding:"2px 0",textAlign:"center"}}>Not now</button>
+                </div>
+              </div>
+            )}
+
             <div className="grid-2-1">
               <Card>
                 <div style={{display:"flex",alignItems:"center",gap:18}}>
@@ -3341,6 +3421,49 @@ export default function App() {
         </div>
         <Btn onClick={saveWallet} style={{width:"100%",padding:13,fontSize:14}}>{editWal?"Save Changes":"Create Account"}</Btn>
       </Modal>
+
+      {/* ── Install App Instructions Modal (iOS / Desktop) ── */}
+      {showInstallModal&&(()=>{
+        const isIOS    = /iphone|ipad|ipod/i.test(navigator.userAgent);
+        const isAndroid= /android/i.test(navigator.userAgent);
+        const steps = isIOS ? [
+          { icon:"1️⃣", text: "Open this page in Safari (not Chrome or Firefox)" },
+          { icon:"2️⃣", text: "Tap the Share button at the bottom of the screen  ⎙" },
+          { icon:"3️⃣", text: "Scroll down and tap "Add to Home Screen"" },
+          { icon:"4️⃣", text: "Tap "Add" in the top-right corner — done!" },
+        ] : isAndroid ? [
+          { icon:"1️⃣", text: "Open this page in Chrome" },
+          { icon:"2️⃣", text: "Tap the three-dot menu ⋮ at the top-right" },
+          { icon:"3️⃣", text: "Tap "Add to Home screen" or "Install app"" },
+          { icon:"4️⃣", text: "Tap "Add" / "Install" to confirm — done!" },
+        ] : [
+          { icon:"1️⃣", text: "Open this page in Chrome or Edge" },
+          { icon:"2️⃣", text: "Look for the install icon (⊕) in the address bar" },
+          { icon:"3️⃣", text: "Click "Install" in the popup — done!" },
+          { icon:"4️⃣", text: "On Firefox: bookmark the page for quick access" },
+        ];
+        return(
+          <Modal open title="📲 Download Pesa Yangu" onClose={()=>{setShowInstallModal(false);dismissInstallBanner();}}>
+            <div style={{textAlign:"center",marginBottom:20}}>
+              <div style={{width:64,height:64,background:`linear-gradient(135deg,${C.teal},${C.blue})`,borderRadius:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 12px"}}>◈</div>
+              <div style={{fontFamily:"'DM Serif Display',serif",fontSize:20,marginBottom:6}}>Add to your Home Screen</div>
+              <div style={{color:C.textMuted,fontSize:13,lineHeight:1.5}}>Pesa Yangu works as a full app on your phone — no app store download needed.</div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
+              {steps.map((s,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"flex-start",gap:12,background:C.navyLight,borderRadius:12,padding:"12px 14px"}}>
+                  <span style={{fontSize:20,lineHeight:1,flexShrink:0}}>{s.icon}</span>
+                  <span style={{fontSize:13,color:C.textPrimary,lineHeight:1.4}}>{s.text}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{background:C.teal+"18",border:`1px solid ${C.teal}33`,borderRadius:12,padding:"10px 14px",fontSize:12,color:C.textMuted,marginBottom:16}}>
+              ✅ Once installed, you'll get daily reminders, faster load times, and the app icon on your home screen.
+            </div>
+            <Btn onClick={()=>{setShowInstallModal(false);dismissInstallBanner();}} style={{width:"100%",padding:13}}>Got it — I'll install it</Btn>
+          </Modal>
+        );
+      })()}
 
       {/* Transaction Detail Modal */}
       {txDetail&&(()=>{

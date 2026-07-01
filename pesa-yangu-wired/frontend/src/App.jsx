@@ -1116,11 +1116,14 @@ export default function App() {
 
   // ── Derived values
   const totalBalance   = wallets.reduce((s,w)=>s+parseFloat(w.balance||0), 0);
-  const _now = new Date(), _cy = _now.getFullYear(), _cm = _now.getMonth();
-  const curMonthTxs  = txs.filter(t=>{ const d=new Date(t.date||t.tx_date); return d.getFullYear()===_cy&&d.getMonth()===_cm; });
-  const totalIncome    = curMonthTxs.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount, 0);
-  const totalRefunds   = curMonthTxs.filter(t=>t.type==="refund").reduce((s,t)=>s+t.amount, 0);
-  const totalExpense   = Math.max(0, curMonthTxs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount, 0) - totalRefunds);
+  const [totalIncome, totalRefunds, totalExpense] = useMemo(() => {
+    const now = new Date(), cy = now.getFullYear(), cm = now.getMonth();
+    const m = txs.filter(t => { const d = new Date(t.date||t.tx_date); return d.getFullYear()===cy && d.getMonth()===cm; });
+    const inc = m.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount, 0);
+    const ref = m.filter(t=>t.type==="refund").reduce((s,t)=>s+t.amount, 0);
+    const exp = Math.max(0, m.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount, 0) - ref);
+    return [inc, ref, exp];
+  }, [txs]);
   const portfolioValue = investments.reduce((s,i)=>s+i.units*i.currentPrice, 0);
   const totalDebt      = loans.reduce((s,l)=>s+l.remaining, 0);
   const totalGoalSaved = goals.reduce((s,g)=>s+g.saved, 0);

@@ -790,6 +790,12 @@ function SettingsTab({ user, C, theme, toggleTheme, baseCurrency, setBase, curre
   );
 }
 
+// Returns true if a transaction falls in the current calendar month
+function isCurrentMonth(t) {
+  const now = new Date(), d = new Date(t.date||t.tx_date);
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN APP
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1116,9 +1122,9 @@ export default function App() {
 
   // ── Derived values
   const totalBalance   = wallets.reduce((s,w)=>s+parseFloat(w.balance||0), 0);
-  const totalIncome    = txs.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount, 0);
-  const totalRefunds   = txs.filter(t=>t.type==="refund").reduce((s,t)=>s+t.amount, 0);
-  const totalExpense   = Math.max(0, txs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount, 0) - totalRefunds);
+  const totalIncome    = txs.filter(t=>t.type==="income"  && isCurrentMonth(t)).reduce((s,t)=>s+t.amount, 0);
+  const totalRefunds   = txs.filter(t=>t.type==="refund"  && isCurrentMonth(t)).reduce((s,t)=>s+t.amount, 0);
+  const totalExpense   = Math.max(0, txs.filter(t=>t.type==="expense" && isCurrentMonth(t)).reduce((s,t)=>s+t.amount, 0) - totalRefunds);
   const portfolioValue = investments.reduce((s,i)=>s+i.units*i.currentPrice, 0);
   const totalDebt      = loans.reduce((s,l)=>s+l.remaining, 0);
   const totalGoalSaved = goals.reduce((s,g)=>s+g.saved, 0);

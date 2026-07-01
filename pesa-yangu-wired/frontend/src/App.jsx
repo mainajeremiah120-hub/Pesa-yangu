@@ -1146,11 +1146,6 @@ export default function App() {
     return nonZero.length ? nonZero.reduce((s,m)=>s+m.value,0)/nonZero.length : 0;
   }, [last6MonthsExpenses]);
 
-  const [budgetYear,      setBudgetYear]      = useState(() => new Date().getFullYear());
-  const [budgetMonth,     setBudgetMonth]     = useState(() => new Date().getMonth() + 1);
-  const [budgetTrend,     setBudgetTrend]     = useState([]);
-  const [showBudgetTrend, setShowBudgetTrend] = useState(false);
-
   // ── Monthly budget amounts fetched from API (map: cat_id → effective_budget_kes)
   const [monthlyBudgetAmounts, setMonthlyBudgetAmounts] = useState({});
   useEffect(() => {
@@ -1223,6 +1218,10 @@ export default function App() {
   const [walletSearch,   setWalletSearch]   = useState("");
   const [walletView,     setWalletView]     = useState("grid");
   const [budgetSearch,   setBudgetSearch]   = useState("");
+  const [budgetYear,     setBudgetYear]     = useState(() => new Date().getFullYear());
+  const [budgetMonth,    setBudgetMonth]    = useState(() => new Date().getMonth() + 1);
+  const [budgetTrend,    setBudgetTrend]    = useState([]);
+  const [showBudgetTrend, setShowBudgetTrend] = useState(false);
 
   const filteredTxs = useMemo(() => {
     const pool = limits.txHistory < Infinity ? txs.slice(0, limits.txHistory) : txs;

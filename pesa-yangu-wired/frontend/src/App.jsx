@@ -2919,6 +2919,8 @@ export default function App() {
           const bmEarn = {}; incCats.forEach(c=>bmEarn[c.id]=0);
           bmTxs.filter(t=>t.type==="income").forEach(t=>{ const key=t.category||t.category_id; bmEarn[key]=(bmEarn[key]||0)+t.amount; });
           const bmOver = expCats.filter(c=>c.budget>0 && (bmSpend[c.id]||0)>c.budget);
+          const bmTotalIncome  = bmTxs.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0);
+          const bmTotalExpense = Math.max(0, bmTxs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0) - bmTxs.filter(t=>t.type==="refund").reduce((s,t)=>s+t.amount,0));
           const isCurrentBM = budgetYear===new Date().getFullYear() && budgetMonth===new Date().getMonth()+1;
           const bq = budgetSearch.trim().toLowerCase();
           const sortedExpCats = [...expCats].sort((a,b)=>a.name.localeCompare(b.name));
@@ -2941,6 +2943,22 @@ export default function App() {
               <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
                 <Btn onClick={()=>{setFIncCat(blankIncCat);openM("incCat");}} outline color={C.teal} small>+ Income Cat.</Btn>
                 <Btn onClick={()=>{setFExpCat(blankExpCat);openM("expCat");}} small>+ Expense Cat.</Btn>
+              </div>
+            </div>
+
+            {/* Month summary */}
+            <div style={{display:"flex",gap:10}}>
+              <div style={{flex:1,background:C.navyLight,borderRadius:12,padding:"12px 16px",borderTop:`3px solid ${C.teal}`}}>
+                <div style={{fontSize:10,color:C.textMuted,marginBottom:4}}>INCOME</div>
+                <div style={{fontFamily:"'DM Serif Display',serif",fontSize:20,color:C.teal}}>{disp(bmTotalIncome)}</div>
+              </div>
+              <div style={{flex:1,background:C.navyLight,borderRadius:12,padding:"12px 16px",borderTop:`3px solid ${C.coral}`}}>
+                <div style={{fontSize:10,color:C.textMuted,marginBottom:4}}>EXPENSES</div>
+                <div style={{fontFamily:"'DM Serif Display',serif",fontSize:20,color:bmTotalExpense>0?C.coral:C.textPrimary}}>{disp(bmTotalExpense)}</div>
+              </div>
+              <div style={{flex:1,background:C.navyLight,borderRadius:12,padding:"12px 16px",borderTop:`3px solid ${bmTotalIncome>=bmTotalExpense?C.teal:C.coral}`}}>
+                <div style={{fontSize:10,color:C.textMuted,marginBottom:4}}>NET</div>
+                <div style={{fontFamily:"'DM Serif Display',serif",fontSize:20,color:bmTotalIncome>=bmTotalExpense?C.teal:C.coral}}>{disp(bmTotalIncome-bmTotalExpense)}</div>
               </div>
             </div>
 

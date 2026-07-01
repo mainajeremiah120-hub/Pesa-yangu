@@ -74,18 +74,43 @@ categoryRouter.delete("/:id", async (req,res,next)=>{
 // ══════════════════════════════════════════════════════════════════════════════
 const budgetRouter = express.Router();
 
+// GET /budgets?year=2026&month=6
+// Returns categories with actual spending for the given month.
+// monthly_budgets row overrides the category's default budget_kes for that month.
 budgetRouter.get("/", async (req,res,next)=>{
   try {
+    const now   = new Date();
+    const year  = parseInt(req.query.year  || now.getFullYear(),  10);
+    const month = parseInt(req.query.month || now.getMonth() + 1, 10);
     const {rows}=await query(
-      `SELECT c.*,COALESCE(SUM(CASE WHEN t.type='expense' THEN t.amount_kes ELSE 0 END),0) AS spent_kes
-       FROM categories c LEFT JOIN transactions t ON t.category_id=c.id AND t.user_id=c.user_id AND date_trunc('month',t.tx_date)=date_trunc('month',CURRENT_DATE)
-       WHERE c.user_id=$1 GROUP BY c.id ORDER BY c.type,c.sort_order`,
-      [req.user.id]
+      `SELECT c.*,
+              COALESCE(mb.budget_kes, c.budget_kes) AS effective_budget,
+              mb.budget_kes                          AS monthly_budget_kes,
+              COALESCE(SUM(CASE WHEN t.type='expense' THEN t.amount_kes
+                                WHEN t.type='income'  THEN t.amount_kes
+                                ELSE 0 END
+                           * CASE WHEN t.type='expense' THEN 1 ELSE 0 END
+                         ),0)                        AS spent_kes,
+              COALESCE(SUM(CASE WHEN t.type='income' THEN t.amount_kes ELSE 0 END),0) AS earned_kes
+       FROM categories c
+       LEFT JOIN monthly_budgets mb
+              ON mb.category_id=c.id AND mb.user_id=c.user_id
+             AND mb.year=$2 AND mb.month=$3
+       LEFT JOIN transactions t
+              ON t.category_id=c.id AND t.user_id=c.user_id
+             AND EXTRACT(YEAR  FROM t.tx_date)=$2
+             AND EXTRACT(MONTH FROM t.tx_date)=$3
+             AND t.type IN ('expense','income')
+       WHERE c.user_id=$1
+       GROUP BY c.id, mb.budget_kes
+       ORDER BY c.type, c.sort_order`,
+      [req.user.id, year, month]
     );
-    res.json({budgets:rows});
+    res.json({budgets:rows, year, month});
   } catch(e){next(e);}
 });
 
+// POST /budgets — set default (non-month-specific) budget on category
 budgetRouter.post("/", async (req,res,next)=>{
   try {
     const {category_id,budget_kes}=z.object({category_id:z.string().uuid(),budget_kes:z.number().min(0)}).parse(req.body);
@@ -93,6 +118,64 @@ budgetRouter.post("/", async (req,res,next)=>{
     if(!rows.length) return res.status(404).json({error:"Category not found"});
     res.json({category:rows[0]});
   } catch(e){if(e instanceof z.ZodError) return res.status(400).json({error:e.errors[0].message}); next(e);}
+});
+
+// POST /budgets/monthly — upsert a budget for a specific month
+budgetRouter.post("/monthly", async (req,res,next)=>{
+  try {
+    const {category_id,year,month,budget_kes}=z.object({
+      category_id:z.string().uuid(),
+      year:z.number().int().min(2000).max(2100),
+      month:z.number().int().min(1).max(12),
+      budget_kes:z.number().min(0),
+    }).parse(req.body);
+    const {rows}=await query(
+      `INSERT INTO monthly_budgets (user_id,category_id,year,month,budget_kes)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (user_id,category_id,year,month)
+       DO UPDATE SET budget_kes=$5, updated_at=NOW()
+       RETURNING *`,
+      [req.user.id,category_id,year,month,budget_kes]
+    );
+    res.json({budget:rows[0]});
+  } catch(e){if(e instanceof z.ZodError) return res.status(400).json({error:e.errors[0].message}); next(e);}
+});
+
+// GET /budgets/trend?months=6 — last N months: total budgeted vs total spent per month
+budgetRouter.get("/trend", async (req,res,next)=>{
+  try {
+    const n = Math.min(parseInt(req.query.months||"6",10), 24);
+    const {rows}=await query(
+      `WITH months AS (
+         SELECT generate_series(
+           date_trunc('month', CURRENT_DATE) - ((${n}-1) * INTERVAL '1 month'),
+           date_trunc('month', CURRENT_DATE),
+           INTERVAL '1 month'
+         ) AS m
+       )
+       SELECT
+         EXTRACT(YEAR  FROM mo.m)::int AS year,
+         EXTRACT(MONTH FROM mo.m)::int AS month,
+         TO_CHAR(mo.m,'Mon YYYY')      AS label,
+         COALESCE(SUM(COALESCE(mb.budget_kes, c.budget_kes)),0)::numeric(15,2) AS total_budget,
+         COALESCE(SUM(CASE WHEN t.type='expense' THEN t.amount_kes ELSE 0 END),0)::numeric(15,2) AS total_spent,
+         COALESCE(SUM(CASE WHEN t.type='income'  THEN t.amount_kes ELSE 0 END),0)::numeric(15,2) AS total_earned
+       FROM months mo
+       CROSS JOIN (SELECT id, budget_kes FROM categories WHERE user_id=$1) c
+       LEFT JOIN monthly_budgets mb
+              ON mb.category_id=c.id AND mb.user_id=$1
+             AND mb.year =EXTRACT(YEAR  FROM mo.m)
+             AND mb.month=EXTRACT(MONTH FROM mo.m)
+       LEFT JOIN transactions t
+              ON t.category_id=c.id AND t.user_id=$1
+             AND date_trunc('month',t.tx_date)=mo.m
+             AND t.type IN ('expense','income')
+       GROUP BY mo.m
+       ORDER BY mo.m`,
+      [req.user.id]
+    );
+    res.json({trend:rows});
+  } catch(e){next(e);}
 });
 
 // ══════════════════════════════════════════════════════════════════════════════

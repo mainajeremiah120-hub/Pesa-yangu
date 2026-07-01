@@ -122,8 +122,10 @@ export const catsApi = {
 
 // ── Budgets ───────────────────────────────────────────────────────────────────
 export const budgetsApi = {
-  list: ()  => unwrap(client.get("/budgets")),
-  set:  (p) => unwrap(client.post("/budgets", p)),
+  list:        (year, month) => unwrap(client.get("/budgets", { params: { year, month } })),
+  set:         (p)           => unwrap(client.post("/budgets", p)),
+  setMonthly:  (p)           => unwrap(client.post("/budgets/monthly", p)),
+  trend:       (months)      => unwrap(client.get("/budgets/trend", { params: { months } })),
 };
 
 // ── Goals ─────────────────────────────────────────────────────────────────────

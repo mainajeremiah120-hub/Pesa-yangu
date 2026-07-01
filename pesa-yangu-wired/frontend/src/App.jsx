@@ -3448,17 +3448,17 @@ export default function App() {
         const steps = isIOS ? [
           { icon:"1️⃣", text: "Open this page in Safari (not Chrome or Firefox)" },
           { icon:"2️⃣", text: "Tap the Share button at the bottom of the screen  ⎙" },
-          { icon:"3️⃣", text: "Scroll down and tap "Add to Home Screen"" },
-          { icon:"4️⃣", text: "Tap "Add" in the top-right corner — done!" },
+          { icon:"3️⃣", text: 'Scroll down and tap "Add to Home Screen"' },
+          { icon:"4️⃣", text: 'Tap "Add" in the top-right corner — done!' },
         ] : isAndroid ? [
           { icon:"1️⃣", text: "Open this page in Chrome" },
           { icon:"2️⃣", text: "Tap the three-dot menu ⋮ at the top-right" },
-          { icon:"3️⃣", text: "Tap "Add to Home screen" or "Install app"" },
-          { icon:"4️⃣", text: "Tap "Add" / "Install" to confirm — done!" },
+          { icon:"3️⃣", text: 'Tap "Add to Home screen" or "Install app"' },
+          { icon:"4️⃣", text: 'Tap "Add" / "Install" to confirm — done!' },
         ] : [
           { icon:"1️⃣", text: "Open this page in Chrome or Edge" },
           { icon:"2️⃣", text: "Look for the install icon (⊕) in the address bar" },
-          { icon:"3️⃣", text: "Click "Install" in the popup — done!" },
+          { icon:"3️⃣", text: 'Click "Install" in the popup — done!' },
           { icon:"4️⃣", text: "On Firefox: bookmark the page for quick access" },
         ];
         return(

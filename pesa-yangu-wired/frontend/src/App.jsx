@@ -2893,7 +2893,7 @@ export default function App() {
                       <span>{highlight(w?.name||"—")}</span><span>·</span>
                       <span>{fmtDate(t.date||t.tx_date)}{txTime(t)?" · "+txTime(t):""}</span>
                       {t.loanId&&<Badge color={C.coral}>Loan</Badge>}
-                      {t.recurring&&<Badge color={C.purple}>🔁</Badge>}}
+                      {t.recurring&&<Badge color={C.purple}>🔁</Badge>}
                       {isRefund&&origTx&&<span style={{color:"#9B59B6"}}>↩ {origTx.merchant||origTx.note||"expense"}</span>}
                     </div>
                   </div>
@@ -2969,7 +2969,7 @@ export default function App() {
                   <div style={{display:"flex",alignItems:"center",gap:10}}>
                     <span style={{fontSize:18}}>{c.icon}</span>
                     <div>
-                      <div style={{fontWeight:600,fontSize:13,display:"flex",alignItems:"center",gap:6}}>{c.name}{c.watch&&<Badge color={C.gold}>👁</Badge>}}</div>
+                      <div style={{fontWeight:600,fontSize:13,display:"flex",alignItems:"center",gap:6}}>{c.name}{c.watch&&<Badge color={C.gold}>👁</Badge>}</div>
                       <div style={{fontSize:10,color:C.textMuted}}>{txCnt>0?`${txCnt} record${txCnt!==1?"s":""}  ·  `:""}{c.budget>0?`Budget: ${disp(c.budget)}`:"No budget set"}</div>
                     </div>
                   </div>

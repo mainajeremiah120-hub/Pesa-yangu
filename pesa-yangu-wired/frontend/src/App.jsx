@@ -2762,7 +2762,11 @@ export default function App() {
               const fw=wallets.find(w=>w.id===txWalletFilter);
               return fw?<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:fw.color+"22",border:`1px solid ${fw.color}44`,borderRadius:12,padding:"10px 14px",marginBottom:10,gap:8}}>
                 <button onClick={()=>setTab("accounts")} style={{background:"none",border:"none",color:fw.color,cursor:"pointer",fontSize:13,fontWeight:700,padding:"0 4px",flexShrink:0}}>← Wallets</button>
-                <span style={{fontSize:13,color:fw.color,fontWeight:600,flex:1,textAlign:"center"}}>{fw.icon} {fw.name}</span>
+                <div style={{flex:1,textAlign:"center"}}>
+                  <div style={{fontSize:12,color:fw.color,fontWeight:600}}>{fw.icon} {fw.name}</div>
+                  <div style={{fontFamily:"'DM Serif Display',serif",fontSize:20,color:parseFloat(fw.balance||0)>=0?C.teal:C.coral,marginTop:2}}>{disp(parseFloat(fw.balance||0))}</div>
+                  <div style={{fontSize:10,color:C.textMuted,marginTop:1}}>Current balance</div>
+                </div>
                 <button onClick={()=>setTxWalletFilter("")} style={{background:"none",border:"none",color:fw.color,cursor:"pointer",fontSize:13,fontWeight:700,padding:"0 4px",flexShrink:0}}>✕ All</button>
               </div>:null;
             })()}
